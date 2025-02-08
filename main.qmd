@@ -4,23 +4,83 @@ format: html
 editor: visual
 ---
 
-## Quarto
+## Create Database
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+```{r create_database}
+library(RSQLite)
 
-## Running Code
+connection <- dbConnect(SQLite(), "csrankings.db")
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+# csranking
+query <- "
+CREATE TABLE IF NOT EXISTS csrankings (
+    researcher_name VARCHAR(255),
+    affiliation VARCHAR(255),
+    homepage VARCHAR(2048),
+    scholarid VARCHAR(16),
+    PRIMARY KEY (researcher_name, affiliation)
+);"
 
-```{r}
-1 + 1
+dbExecute(connection, query)
+
+
+# generated_author_info
+query <- "
+CREATE TABLE IF NOT EXISTS generated_author_info (
+    researcher_name VARCHAR(255) PRIMARY KEY,
+    dept VARCHAR(255) FOREIGN KEY REFERENCES csrankings.,
+    area VARCHAR(16),
+    count INT,
+    adjustedcount DOUBLE,
+    publication_year INT
+);"
+
+dbExecute(connection, query)
+
+
+# acm_fellows
+query <- "
+CREATE TABLE IF NOT EXISTS acm_fellows (
+    researcher_name VARCHAR(255),
+    award_year INT
+);"
+
+dbExecute(connection, query)
+
+
+# geolocation
+query <- "
+CREATE TABLE IF NOT EXISTS  geolocation (
+    institution VARCHAR(255),
+    latitude DOUBLE,
+    longitude DOUBLE
+);"
+
+dbExecute(connection, query)
+
+
+# country_info
+query <- "
+CREATE TABLE IF NOT EXISTS country_info (
+    institution VARCHAR(255),
+    region VARCHAR(255),
+    countryabbrv VARCHAR(16)
+);
+"
+
+dbExecute(connection, query)
+
+
+# dblp_aliases
+query <- "
+CREATE TABLE IF NOT EXISTS dblp_aliases (
+    alias VARCHAR(255),
+    researcher_name VARCHAR(255)
+);
+"
+
+dbExecute(connection, query)
 ```
 
-You can add options to executable code like this
 
-```{r}
-#| echo: false
-2 * 2
-```
 
-The `echo: false` option disables the printing of code (only output is displayed).
