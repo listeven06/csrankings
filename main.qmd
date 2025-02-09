@@ -137,6 +137,86 @@ RSQLite::dbExecute(connection, query)
 
 ```
 
+## Geolocation
+
+### Create and Load Data
+
+```{r geolocation}
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# geolocation
+
+drop_check <- "DROP TABLE IF EXISTS geolocation;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS  geolocation (
+    institution VARCHAR(255),
+    latitude DOUBLE,
+    longitude DOUBLE,
+    PRIMARY KEY (institution),
+    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM geolocation;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "geolocation", geolocation, append = TRUE, row.names = FALSE)
+  message("Data loaded into geolocation table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM geolocation;")
+print(result)
+
+RSQLite::dbExecute(connection, query)
+
+```
+
+## ACM Fellows
+
+### Create and Load Data
+
+```{r acm_fellows}
+names(acm_fellows)[names(acm_fellows) == "year"] <- "award_year"
+names(acm_fellows)[names(acm_fellows) == "name"] <- "researcher_name"
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# asm_fellows
+
+drop_check <- "DROP TABLE IF EXISTS acm_fellows;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+CREATE TABLE IF NOT EXISTS acm_fellows (
+    researcher_name VARCHAR(255),
+    award_year INT,
+    PRIMARY KEY (researcher_name, award_year),
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM acm_fellows;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "acm_fellows", acm_fellows, append = TRUE, row.names = FALSE)
+  message("Data loaded into acm_fellows table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM acm_fellows;")
+print(result)
+
+RSQLite::dbExecute(connection, query)
+
+```
+
 ## Generated Author Info
 
 ### Split Names
@@ -285,40 +365,6 @@ print(result)
 
 RSQLite::dbDisconnect(connection)
 
-```
-
-###  
-
-## Create Database
-
-```{r create_database}
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# acm_fellows
-query <- "
-CREATE TABLE IF NOT EXISTS acm_fellows (
-    researcher_name VARCHAR(255),
-    award_year INT,
-    PRIMARY KEY (researcher_name, award_year),
-    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
-);"
-
-RSQLite::dbExecute(connection, query)
-
-
-# geolocation
-query <- "
-    CREATE TABLE IF NOT EXISTS  geolocation (
-    institution VARCHAR(255),
-    latitude DOUBLE,
-    longitude DOUBLE,
-    PRIMARY KEY (institution),
-    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
-);"
-
-RSQLite::dbExecute(connection, query)
-
-
-RSQLite::dbDisconnect(connection)
 ```
 
 ```{r}
