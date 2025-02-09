@@ -98,6 +98,45 @@ print(result)
 RSQLite::dbDisconnect(connection)
 ```
 
+## Country
+
+### Create and Load Data
+
+```{r country}
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# country_info
+
+drop_check <- "DROP TABLE IF EXISTS country_info;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+CREATE TABLE IF NOT EXISTS country_info (
+    institution VARCHAR(255),
+    region VARCHAR(255),
+    countryabbrv VARCHAR(16),
+    PRIMARY KEY (institution),
+    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
+);
+"
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM country_info;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "country_info", country_info, append = TRUE, row.names = FALSE)
+  message("Data loaded into country_info table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM country_info;")
+print(result)
+
+RSQLite::dbExecute(connection, query)
+
+```
+
 ## Generated Author Info
 
 ### Split Names
@@ -278,32 +317,6 @@ query <- "
 
 RSQLite::dbExecute(connection, query)
 
-
-# country_info
-query <- "
-CREATE TABLE IF NOT EXISTS country_info (
-    institution VARCHAR(255),
-    region VARCHAR(255),
-    countryabbrv VARCHAR(16),
-    PRIMARY KEY (institution),
-    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-
-# dblp_aliases
-query <- "
-CREATE TABLE IF NOT EXISTS dblp_aliases (
-    alias VARCHAR(255),
-    researcher_name VARCHAR(255),
-    PRIMARY KEY (researcher_name, alias),
-    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
-);
-"
-
-RSQLite::dbExecute(connection, query)
 
 RSQLite::dbDisconnect(connection)
 ```
