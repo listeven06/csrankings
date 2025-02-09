@@ -12,13 +12,13 @@ library(readr)
 csrankings <- read_csv("datasets/csrankings.csv")
 author_info <- read_csv("datasets/generated-author-info.csv")
 acm_fellows <- read_csv("datasets/acm-fellows.csv")
-turing_awards <- read.csv("datasets/turing.csv")
-geolocation <- read.csv("datasets/geolocation.csv")
-country_info <- read.csv("datasets/country-info.csv")
-dblp_aliases.csv <- read.csv("datasets/dblp-aliases.csv")
-conference_ranking <- read.csv("datasets/conference_ranking.csv")
-us_news <- read.csv("datasets/data.csv")
-field_conference <- read.csv("datasets/field_conference.csv")
+turing_awards <- read_csv("datasets/turing.csv")
+geolocation <- read_csv("datasets/geolocation.csv")
+country_info <- read_csv("datasets/country-info.csv")
+dblp_aliases <- read_csv("datasets/dblp-aliases.csv")
+conference_ranking <- read_csv("datasets/conference_ranking.csv")
+us_news <- read_csv("datasets/data.csv")
+field_conference <- read_csv("datasets/field_conference.csv")
 
 head(csrankings)
 head(author_info)
@@ -31,6 +31,75 @@ head(conference_ranking)
 head(us_news)
 head(field_conference)
 ```
+
+
+## Create and Load Databases
+
+### csrankings
+
+```{r split_name}
+library(tidyr)
+library(dplyr)
+
+names(csrankings)[names(csrankings) == "name"] <- "researcher_name"
+
+# The regex explained:
+#   ^([^\\s]+)       -> Matches the first token (first name) at the start.
+#   \\s+             -> One or more spaces.
+#   (?:(.*)\\s+)?    -> Optionally matches the middle part (middle name(s)) followed by space.
+#   ([^\\s]+)$       -> Matches the last token (last name) at the end.
+csrankings <- csrankings %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^([^\\s]+)\\s+(?:(.*)\\s+)?([^\\s]+)$",
+  )
+
+```
+
+```{r csrankings}
+library(RSQLite)
+library(DBI)
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# csranking
+
+drop_check <- "DROP TABLE IF EXISTS csrankings;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS csrankings (
+    researcher_name VARCHAR(255),
+    first_name VARCHAR(225),
+    middle_name VARCHAR(225),
+    last_name VARCHAR(225),
+    affiliation VARCHAR(255),
+    homepage VARCHAR(2048),
+    scholarid VARCHAR(16),
+    PRIMARY KEY (researcher_name, affiliation)
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "csrankings", csrankings, append = TRUE, row.names = FALSE)
+  message("Data loaded into csrankings table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+print(result)
+
+RSQLite::dbDisconnect(connection)
+```
+
+
+
+
 
 
 ## Create Database
