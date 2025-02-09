@@ -39,6 +39,8 @@ field_conference <- read.csv("datasets/field_conference.csv")
 
 ## CS Ranking
 
+### Split Names
+
 ```{r split_name}
 names(csrankings)[names(csrankings) == "name"] <- "researcher_name"
 
@@ -51,10 +53,13 @@ csrankings <- csrankings %>%
   extract(
     col = researcher_name,
     into = c("first_name", "middle_name", "last_name"),
-    regex = "^([^\\s]+)\\s+(?:(.*)\\s+)?([^\\s]+)$",
+    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    remove = FALSE 
   )
 
 ```
+
+### Create and Load Data
 
 ```{r csrankings}
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
@@ -93,41 +98,86 @@ print(result)
 RSQLite::dbDisconnect(connection)
 ```
 
-## Create Database
+## Generated Author Info
 
-```{r create_database}
+### Split Names
+
+```{r generated_author}
+
+names(author_info)[names(author_info) == "name"] <- "researcher_name"
+names(author_info)[names(author_info) == "year"] <- "publication_year"
+
+# The regex explained:
+#   ^([^\\s]+)       -> Matches the first token (first name) at the start.
+#   \\s+             -> One or more spaces.
+#   (?:(.*)\\s+)?    -> Optionally matches the middle part (middle name(s)) followed by space.
+#   ([^\\s]+)$       -> Matches the last token (last name) at the end.
+author_info <- author_info %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    remove = FALSE 
+  )
+```
+
+### Create and Load Data
+
+```{r create and load table}
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-
 # csranking
-query <- "
-CREATE TABLE IF NOT EXISTS csrankings (
-    researcher_name VARCHAR(255),
-    affiliation VARCHAR(255),
-    homepage VARCHAR(2048),
-    scholarid VARCHAR(16),
-    PRIMARY KEY (researcher_name, affiliation)
-);"
 
-RSQLite::dbExecute(connection, query)
+drop_check <- "DROP TABLE IF EXISTS generated_author_info;"
 
+RSQLite::dbExecute(connection, drop_check)
 
 # generated_author_info
 query <- "
 CREATE TABLE IF NOT EXISTS generated_author_info (
     researcher_name VARCHAR(255),
+    first_name VARCHAR(225),
+    middle_name VARCHAR(225),
+    last_name VARCHAR(225),
     dept VARCHAR(255),
     area VARCHAR(16),
     count INT,
     adjustedcount DOUBLE,
     publication_year INT,
-    PRIMARY KEY (researcher_name),
+    PRIMARY KEY (researcher_name, dept, area, publication_year),
     FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
     FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
 );"
 
 RSQLite::dbExecute(connection, query)
 
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM generated_author_info;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "generated_author_info", author_info, append = TRUE, row.names = FALSE)
+  message("Data loaded into generated_author_info table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
 
+result <- dbGetQuery(connection, "SELECT * FROM generated_author_info;")
+print(result)
+
+RSQLite::dbDisconnect(connection)
+
+```
+
+## DBLP Aliases
+
+### Create and Load Data
+
+```{r dblp aliases}
+
+```
+
+## Create Database
+
+```{r create_database}
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 # acm_fellows
 query <- "
 CREATE TABLE IF NOT EXISTS acm_fellows (
