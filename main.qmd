@@ -16,7 +16,7 @@ turing_awards <- read_csv("datasets/turing.csv")
 geolocation <- read_csv("datasets/geolocation.csv")
 country_info <- read_csv("datasets/country-info.csv")
 dblp_aliases <- read_csv("datasets/dblp-aliases.csv")
-conference_ranking <- read_csv("datasets/conference_ranking.csv")
+conference_rankings <- read_csv("datasets/conference_ranking.csv")
 us_news <- read_csv("datasets/data.csv")
 field_conference <- read_csv("datasets/field_conference.csv")
 
@@ -27,7 +27,7 @@ head(turing_awards)
 head(geolocation)
 head(country_info)
 head(dblp_aliases)
-head(conference_ranking)
+head(conference_rankings)
 head(us_news)
 head(field_conference)
 ```
@@ -155,9 +155,9 @@ print(result)
 RSQLite::dbDisconnect(connection)
 ```
 
-### country
+### country_info
 
-```{r country}
+```{r country_info}
 library(RSQLite)
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
@@ -197,6 +197,83 @@ RSQLite::dbDisconnect(connection)
 ```
 
 
+### conference_ranking
+
+For the conference ranking (conference_ranking.csv) file, when you create a corresponding table, in addition to the three attributes for abbreviation, full name, rating, also include another attribute for “academic society” whose value can be ‘ACM’, ‘IEEE’, ‘ACM+IEEE’, or ‘other’. You will need to scrape this information from the conference full name. E.g., if a conference is titled “ACM conference on Machine Learning” since ACM appears in the title, we will the value ‘ACM’ for the “academic society”. Likewise, a conference such as “IEEE conference on Big Data” will be marked as an ‘IEEE’ conference. If neither IEEE nor ACM appear, then we will assign the value of ‘other’ to the field, while if both IEEE and ACM appear, we will assign the value ‘ACM+IEEE’.
+
+```{r preprocess_conference_rankings}
+colnames(conference_rankings)
+
+names(conference_rankings)[names(conference_rankings) == "Antonym"] <- "acronym"
+names(conference_rankings)[names(conference_rankings) == "Name"] <- "conference_name"
+names(conference_rankings)[names(conference_rankings) == "Rank"] <- "rank"
+
+colnames(conference_rankings)
+head(conference_rankings)
+```
+
+
+```{r conference_ranking}
+library(RSQLite)
+library(DBI)
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+
+
+drop_check <- "DROP TABLE IF EXISTS conference_rankings;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+# conference_ranking
+query <- "
+CREATE TABLE IF NOT EXISTS conference_rankings (
+  acronym VARCHAR(16),
+  conference_name VARCHAR(255),
+  rank VARCHAR(2),
+  academic_society VARCHAR(8),
+  PRIMARY KEY (acronym, conference_name),
+  FOREIGN KEY (acronym) REFERENCES generated_author_info(acronym)
+);
+"
+
+RSQLite::dbExecute(connection, query)
+
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM conference_rankings;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "conference_rankings", conference_rankings, append = TRUE, row.names = FALSE)
+  message("Data loaded into conference_rankings table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM conference_rankings;")
+print(result)
+
+# Scrape academic_society column
+
+query <- "
+UPDATE conference_rankings
+SET academic_society = CASE
+    WHEN (conference_name LIKE '%ACM%' AND conference_name LIKE '%IEEE%') THEN 'ACM+IEEE'
+    WHEN conference_name LIKE 'ACM%' THEN 'ACM'
+    WHEN conference_name LIKE 'IEEE%' THEN 'IEEE'
+    ELSE 'other'
+END;
+"
+
+RSQLite::dbExecute(connection, query)
+
+result <- dbGetQuery(connection, "SELECT * FROM conference_rankings;")
+print(result)
+
+
+RSQLite::dbDisconnect(connection)
+
+```
+
+
 
 
 ## Create Database
@@ -205,18 +282,6 @@ RSQLite::dbDisconnect(connection)
 library(RSQLite)
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-
-# csranking
-query <- "
-CREATE TABLE IF NOT EXISTS csrankings (
-    researcher_name VARCHAR(255),
-    affiliation VARCHAR(255),
-    homepage VARCHAR(2048),
-    scholarid VARCHAR(16),
-    PRIMARY KEY (researcher_name, affiliation)
-);"
-
-RSQLite::dbExecute(connection, query)
 
 
 # generated_author_info
@@ -231,18 +296,6 @@ CREATE TABLE IF NOT EXISTS generated_author_info (
     PRIMARY KEY (researcher_name),
     FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
     FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
-);"
-
-RSQLite::dbExecute(connection, query)
-
-
-# acm_fellows
-query <- "
-CREATE TABLE IF NOT EXISTS acm_fellows (
-    researcher_name VARCHAR(255),
-    award_year INT,
-    PRIMARY KEY (researcher_name, award_year),
-    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );"
 
 RSQLite::dbExecute(connection, query)
@@ -294,7 +347,7 @@ RSQLite::dbDisconnect(connection)
 connection <- dbConnect(SQLite(), "csrankings.db")
 
 
-# conference_ranging
+# conference_ranking
 query <- "
 CREATE TABLE IF NOT EXISTS conference_ranking (
   acronym VARCHAR(16),
