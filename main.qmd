@@ -7,11 +7,14 @@ editor: visual
 ## Libraries
 
 ```{r libraries}
-
+install.packages("tidyr")
+install.packages("dplyr")
 install.packages("DBI")
 install.packages("readr")
 install.packages("RSQLites")
+library(tidyr)
 library(readr)
+library(dplyr)
 library(DBI)
 library(RSQLite)
 
@@ -36,10 +39,24 @@ field_conference <- read.csv("datasets/field_conference.csv")
 
 ## CS Ranking
 
-```{r csrankings}
-
+```{r split_name}
 names(csrankings)[names(csrankings) == "name"] <- "researcher_name"
 
+# The regex explained:
+#   ^([^\\s]+)       -> Matches the first token (first name) at the start.
+#   \\s+             -> One or more spaces.
+#   (?:(.*)\\s+)?    -> Optionally matches the middle part (middle name(s)) followed by space.
+#   ([^\\s]+)$       -> Matches the last token (last name) at the end.
+csrankings <- csrankings %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^([^\\s]+)\\s+(?:(.*)\\s+)?([^\\s]+)$",
+  )
+
+```
+
+```{r csrankings}
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 # csranking
 
@@ -50,6 +67,9 @@ RSQLite::dbExecute(connection, drop_check)
 query <- "
     CREATE TABLE IF NOT EXISTS csrankings (
     researcher_name VARCHAR(255),
+    first_name VARCHAR(225),
+    middle_name VARCHAR(225),
+    last_name VARCHAR(225),
     affiliation VARCHAR(255),
     homepage VARCHAR(2048),
     scholarid VARCHAR(16),
@@ -72,8 +92,6 @@ print(result)
 
 RSQLite::dbDisconnect(connection)
 ```
-
-\
 
 ## Create Database
 
