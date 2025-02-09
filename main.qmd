@@ -119,21 +119,42 @@ CREATE TABLE IF NOT EXISTS data (
   institution_displayName VARCHAR(255),
   institution_schoolType VARCHAR(255),
   institution_aliasNames VARCHAR(255),
-  institution_state VARCHAR(255),
+  institution_state VARCHAR(50),
   institution_city VARCHAR(255),
   institution_zip INT,
-  institution_region VARCHAR(255),
-  institution_isPublic BOOL,
+  institution_region VARCHAR(50),
+  institution_isPublic BOOLEAN,
   institution_institutionalControl VARCHAR(255),
   institution_primaryPhotoCardThumb TEXT,
-  
-  
+  ranking_displayRank VARCHAR(255),
+  ranking_sortRank INT,
+  searchData_actAvg_rawValue FLOAT,
+  searchData_percentReceivingAid_rawValue FLOAT,
+  searchData_acceptanceRate_rawValue FLOAT,
+  searchData_tuition_rawValue FLOAT,
+  searchData_hsGpaAvg_rawValue FLOAT,
+  searchData_engineeringRepScore_rawValue TEXT,
+  searchData_parentRank_rawValue TEXT,
+  searchData_enrollment_rawValue INT,
+  searchData_businessRepScore_rawValue TEXT,
+  searchData_satAvg_rawValue TEXT,
+  searchData_costAfterAid_rawValue FLOAT,
+  searchData_testAvgs_displayValue_0_value VARCHAR(255),
+  searchData_testAvgs_displayValue_1_value VARCHAR(255),
   PRIMARY KEY (institution_displayName)
-
-)
+);
 "
 
+RSQLite::dbExecute(connection, query)
 
+query <- "
+CREATE TABLE IF NOT EXISTS field_conference (
+  major VARCHAR(255),
+  field VARCHAR(255),
+  conference VARCHAR(255),
+  PRIMARY KEY (conference, field)
+)
+"
 ```
 
 
