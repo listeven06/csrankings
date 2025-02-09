@@ -27,12 +27,15 @@ dbExecute(connection, query)
 # generated_author_info
 query <- "
 CREATE TABLE IF NOT EXISTS generated_author_info (
-    researcher_name VARCHAR(255) PRIMARY KEY,
-    dept VARCHAR(255) FOREIGN KEY REFERENCES csrankings.,
+    researcher_name VARCHAR(255),
+    dept VARCHAR(255),
     area VARCHAR(16),
     count INT,
     adjustedcount DOUBLE,
-    publication_year INT
+    publication_year INT,
+    PRIMARY KEY (researcher_name),
+    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
+    FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
 );"
 
 dbExecute(connection, query)
@@ -42,7 +45,9 @@ dbExecute(connection, query)
 query <- "
 CREATE TABLE IF NOT EXISTS acm_fellows (
     researcher_name VARCHAR(255),
-    award_year INT
+    award_year INT,
+    PRIMARY KEY (researcher_name, award_year),
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );"
 
 dbExecute(connection, query)
@@ -53,7 +58,9 @@ query <- "
 CREATE TABLE IF NOT EXISTS  geolocation (
     institution VARCHAR(255),
     latitude DOUBLE,
-    longitude DOUBLE
+    longitude DOUBLE,
+    PRIMARY KEY (institution),
+    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
 );"
 
 dbExecute(connection, query)
@@ -64,7 +71,9 @@ query <- "
 CREATE TABLE IF NOT EXISTS country_info (
     institution VARCHAR(255),
     region VARCHAR(255),
-    countryabbrv VARCHAR(16)
+    countryabbrv VARCHAR(16),
+    PRIMARY KEY (institution),
+    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
 );
 "
 
@@ -75,7 +84,9 @@ dbExecute(connection, query)
 query <- "
 CREATE TABLE IF NOT EXISTS dblp_aliases (
     alias VARCHAR(255),
-    researcher_name VARCHAR(255)
+    researcher_name VARCHAR(255),
+    PRIMARY KEY (researcher_name, alias),
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );
 "
 
