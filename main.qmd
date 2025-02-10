@@ -7,16 +7,15 @@ editor: visual
 ## Libraries
 
 ```{r libraries}
-install.packages("tidyr")
-install.packages("dplyr")
-install.packages("DBI")
-install.packages("readr")
-install.packages("RSQLite")
+install.packages(c("DBI", "RSQLite", "dbplyr", "tidyr", "dplyr", "readr", "knitr"))
+
+library(RSQLite)
 library(tidyr)
 library(readr)
 library(dplyr)
+library(knitr)
 library(DBI)
-library(RSQLite)
+
 
 ```
 
@@ -88,7 +87,7 @@ query <- "
     affiliation VARCHAR(255),
     homepage VARCHAR(2048),
     scholarid VARCHAR(16),
-    PRIMARY KEY (researcher_name, affiliation)
+    PRIMARY KEY (researcher_name)
 );"
 
 RSQLite::dbExecute(connection, query)
@@ -104,6 +103,8 @@ if (row_count$count == 0) {
 
 result <- dbGetQuery(connection, "SELECT * FROM csrankings;")
 print(result)
+
+
 
 RSQLite::dbDisconnect(connection)
 ```
@@ -567,4 +568,113 @@ if (row_count$count == 0) {
 
 result <- dbGetQuery(connection, "SELECT * FROM us_news;")
 print(result)
+```
+
+# Task 2 Results:
+
+```{r}
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+
+tables <- dbListTables(connection)
+
+for (table in tables) {
+  cat ("\n--- Dataset:", table, "---\n")
+  data <- dbGetQuery(connection, paste("SELECT * FROM", table, "LIMIT 5"))
+  print(data)
+}
+
+RSQLite::dbDisconnect(connection)
+```
+
+# Task 3.1
+
+```{r missing_names}
+connection <- dbConnect(SQLite(), "csrankings.db")
+
+cs_names <- dbGetQuery(connection, "SELECT researcher_name FROM csrankings;")
+gai_names <- dbGetQuery(connection, "SELECT researcher_name FROM generated_author_info;")
+acm_names <- dbGetQuery(connection, "SELECT researcher_name FROM acm_fellows;")
+turing_names <- dbGetQuery(connection, "SELECT researcher_name FROM turing;")
+
+gai_query <- "
+SELECT researcher_name
+FROM generated_author_info
+EXCEPT 
+SELECT researcher_name
+FROM csrankings;
+"
+
+gai_missing_in_cs <- dbGetQuery(connection, gai_query)
+
+
+acm_query <- "
+SELECT researcher_name
+FROM acm_fellows
+EXCEPT 
+SELECT researcher_name
+FROM csrankings;
+"
+
+acm_missing_in_cs <- dbGetQuery(connection, acm_query)
+
+turing_query <- "
+SELECT researcher_name
+FROM turing
+EXCEPT 
+SELECT researcher_name
+FROM csrankings;
+"
+
+turing_missing_in_cs <- dbGetQuery(connection, turing_query)
+
+print(head(gai_missing_in_cs, 10)) # generated_author_info
+print(head(acm_missing_in_cs, 10)) # acm
+print(head(turing_missing_in_cs, 10)) # turing
+
+dbDisconnect(connection)
+```
+
+### Generated Author Info
+
+There were 67 missing names that were in generated_author_info but not in cs_ranking.
+
+### ACM Fellows
+
+There are 735 missing names that were in acm_fellows but not in cs_ranking.
+
+### Turing
+
+There are 62 missing names that were in turing_awards but not in cs_ranking.
+
+```{r insert_missing_acm_into_csranking}
+
+acm_missing_in_cs <- acm_missing_in_cs %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    remove = FALSE 
+  )
+
+insert_query <- "
+    INSERT INTO csrankings (researcher_name, first_name, middle_name, last_name, affiliation, homepage, scholarid)
+    VALUES (?, ?, ?, ?, NULL, NULL, NULL);
+"
+
+
+connection <- dbConnect(SQLite(),"csrankings.db")
+
+for(i in seq_len(nrow(acm_missing_in_cs))) {
+  dbExecute(connection, insert_query, params = list(
+    acm_missing_in_cs$researcher_name[i],
+    acm_missing_in_cs$first_name[i],
+    acm_missing_in_cs$middle_name[i],
+    acm_missing_in_cs$last_name[i]
+  ))
+}
+
+test <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+print(test)
+
+dbDisconnect(connection)
 ```
