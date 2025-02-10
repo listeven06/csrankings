@@ -62,9 +62,11 @@ csrankings <- csrankings %>%
   extract(
     col = researcher_name,
     into = c("first_name", "middle_name", "last_name"),
-    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    regex = "^(\\S+)(?:\\s+(.*?))?\\s+(\\S+)$",
     remove = FALSE 
   )
+
+print(csrankings)
 
 ```
 
@@ -246,7 +248,7 @@ author_info <- author_info %>%
   extract(
     col = researcher_name,
     into = c("first_name", "middle_name", "last_name"),
-    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    regex = "^(\\S+)(?:\\s+(.*?))?\\s+(\\S+)$",
     remove = FALSE 
   )
 ```
@@ -652,7 +654,7 @@ acm_missing_in_cs <- acm_missing_in_cs %>%
   extract(
     col = researcher_name,
     into = c("first_name", "middle_name", "last_name"),
-    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
+    regex = "^(\\S+)(?:\\s+(.*?))?\\s+(\\S+)$",
     remove = FALSE 
   )
 
@@ -677,4 +679,147 @@ test <- dbGetQuery(connection, "SELECT * FROM csrankings;")
 print(test)
 
 dbDisconnect(connection)
+```
+
+```{r insert_missing_turing_into_cs_ranking}
+
+# find the unique names only present in turing
+turing_not_in_acm <- setdiff(turing_missing_in_cs$researcher_name, acm_missing_in_cs$researcher_name)
+
+# print(turing_not_in_acm) 35 unique
+
+
+# filter the df to only include the unique names.
+missing_turing_filtered <- turing_missing_in_cs %>%
+  filter(researcher_name %in% turing_not_in_acm)
+
+
+missing_turing_filtered <- missing_turing_filtered %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^(\\S+)(?:\\s+(.*?))?\\s+(\\S+)$",
+    remove = FALSE 
+  )
+
+
+insert_query <- "
+    INSERT INTO csrankings (researcher_name, first_name, middle_name, last_name, affiliation, homepage, scholarid)
+    VALUES (?, ?, ?, ?, NULL, NULL, NULL);
+"
+
+connection <- dbConnect(SQLite(),"csrankings.db")
+
+for(i in seq_len(nrow(missing_turing_filtered))) {
+  dbExecute(connection, insert_query, params = list(
+    missing_turing_filtered$researcher_name[i],
+    missing_turing_filtered$first_name[i],
+    missing_turing_filtered$middle_name[i],
+    missing_turing_filtered$last_name[i]
+  ))
+}
+
+test <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+print(test)
+
+dbDisconnect(connection)
+```
+
+```{r inserting_missing_gia_into_cs_ranking}
+unique_gai_names <- setdiff(gai_missing_in_cs$researcher_name, union(acm_missing_in_cs$researcher_name, turing_missing_in_cs$researcher_name))
+
+missing_gia_filtered <- gai_missing_in_cs %>%
+  filter(researcher_name %in% unique_gai_names)
+
+missing_gia_filtered <- missing_gia_filtered %>%
+  extract(
+    col = researcher_name,
+    into = c("first_name", "middle_name", "last_name"),
+    regex = "^(\\S+)(?:\\s+(.*?))?\\s+(\\S+)$",
+    remove = FALSE 
+  )
+
+insert_query <- "
+    INSERT INTO csrankings (researcher_name, first_name, middle_name, last_name, affiliation, homepage, scholarid)
+    VALUES (?, ?, ?, ?, NULL, NULL, NULL);
+"
+
+
+connection <- dbConnect(SQLite(),"csrankings.db")
+
+for(i in seq_len(nrow(missing_gia_filtered))) {
+  dbExecute(connection, insert_query, params = list(
+    missing_gia_filtered$researcher_name[i],
+    missing_gia_filtered$first_name[i],
+    missing_gia_filtered$middle_name[i],
+    missing_gia_filtered$last_name[i]
+  ))
+}
+
+test <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+print(test)
+
+dbDisconnect(connection)
+
+
+
+```
+
+# Task 3.2
+
+```{r testing_strategy}
+
+
+connection <- dbConnect(SQLite(),"csrankings.db")
+
+query <- "
+    SELECT researcher_name, COUNT(*) AS COUNT FROM csrankings
+    GROUP BY first_name, middle_name, last_name, affiliation, scholarid
+    HAVING COUNT > 1;
+"
+
+test <- dbGetQuery(connection, query)
+print(test)
+
+dbDisconnect(connection)
+
+```
+
+## Rationale
+
+We implemented a very simple duplicate detection method, relying on matching four key attributes: first name, last name, scholarid, and affiliation. The idea is that if there are two or more records having the same value for these fields, they very likely refer to the same individual. The list of authors' names, with their scholarid and affiliation listed, for example, "Michael Carey" - "12345" - "XYZ University" - and other records showing the same "Michael Carey" with the exact scholarid and affiliation, get marked as a duplicate. For the identified sets of probable duplicates, we used this method to resolve them: keep just one record of each and removes the additional rows from the table csranking. This methodology cleans the dataset, providing one record per researcher with no duplication. Though it is a very simple approach, it would work if the data is very organized and if the four chosen attributes are being consistently captured. This will provide a strict and straightforward rule for duplicate detection.
+
+## Implementation
+
+```{r preprocess_fix_names}
+
+connection <- dbConnect(SQLite(), "csrankings.db")
+
+query <- "
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE first_name IS NULL AND middle_name IS NULL AND last_name IS NULL AND researcher_name NOT LIKE '% %';
+"
+
+test <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE researcher_name NOT LIKE '% %';")
+print(test)
+
+```
+
+```{r implementing}
+
+connection <- dbConnect(SQLite(), "csrankings.db")
+
+
+dup_query <- "
+    SELECT researcher_name, first_name, middle_name, last_name, affiliation, scholarid, COUNT(*) AS duplicate_count
+    FROM csrankings
+    GROUP BY first_name, middle_name, last_name, affiliation, scholarid
+    HAVING duplicate_count > 1;
+"
+
+dup_results <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE first_name IS NULL")
+cat("Duplicates detected:\n")
+print(dup_results)
+
 ```
