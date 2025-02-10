@@ -26,8 +26,10 @@ library(dplyr)
 
 # Check author_info names not in CS rankings
 author_info %>% 
-  distinct(name) %>% 
-  filter(!(name %in% csrankings$name))
+  distinct(name, .keep_all = TRUE) %>%
+  select(name, dept) %>% 
+  filter(!(name %in% csrankings$name)) %>% 
+  rename(affiliation = dept)
 
 # Check acm_fellows names not in CS rankings
 acm_fellows %>% 
@@ -40,4 +42,50 @@ turing_awards %>%
   filter(!(name %in% csrankings$name))
 ```
 
+Note:
+author_info has csrankings$affiliation,
+acm_fellows and turing_awards only have 'name'
+
+Note 2:
+potential duplicates when inserting names
+
+Insert:
+1) author_info (goes first since it has affiliation)
+2) acm_fellows - author_info
+3) turing_awards - acm_fellows - author_info
+
+```{r insert_data}
+library(RSQLite)
+library(DBI)
+library(dplyr)
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+
+author_info_toInsert <- author_info %>% 
+  distinct(name, .keep_all = TRUE) %>%
+  select(name, dept) %>% 
+  filter(!(name %in% csrankings$name)) %>% 
+  rename(researcher_name = name,
+    affiliation = dept)
+
+# remove the toInsert set to save time
+acm_fellows_toInsert <- acm_fellows %>% 
+  distinct(name) %>% 
+  filter(!(name %in% csrankings$name) & !(name %in% author_info$name)) %>% 
+  rename(researcher_name = name)
+
+turing_awards_toInsert <- turing_awards %>% 
+  distinct(name) %>% 
+  filter(!(name %in% csrankings$name) & !(name %in% author_info$name) & !(name %in% acm_fellows$name)) %>% 
+  rename(researcher_name = name)
+
+dbWriteTable(connection, "csrankings", author_info_toInsert, append = TRUE, row.names = FALSE)
+dbWriteTable(connection, "csrankings", acm_fellows_toInsert, append = TRUE, row.names = FALSE)
+dbWriteTable(connection, "csrankings", turing_awards_toInsert, append = TRUE, row.names = FALSE)
+
+result <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+print(result)
+
+RSQLite::dbDisconnect(connection)
+```
 
