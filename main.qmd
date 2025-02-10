@@ -34,7 +34,6 @@ dblp_aliases <- read.csv("datasets/dblp-aliases.csv")
 conference_ranking <- read.csv("datasets/conference_ranking.csv")
 us_news <- read.csv("datasets/data.csv")
 field_conference <- read.csv("datasets/field_conference.csv")
-
 ```
 
 ## CS Ranking
@@ -367,43 +366,45 @@ RSQLite::dbDisconnect(connection)
 
 ```
 
-```{r}
+## Conference Field
+
+### Create and Load Data
+
+```{r conference_field}
+# head(field_conference)
+
+
+names(field_conference)[names(field_conference) == "field"] <- "specialized_field"
+names(field_conference)[names(field_conference) == "conference"] <- "conference_name"
+
 connection <- dbConnect(SQLite(), "csrankings.db")
 
+drop_check <- "DROP TABLE IF EXISTS field_conference;"
 
-# conference_ranging
+RSQLite::dbExecute(connection, drop_check)
+
 query <- "
-CREATE TABLE IF NOT EXISTS conference_ranking (
-  acronym VARCHAR(16),
-  conference_name VARCHAR(255),
-  rank VARCHAR(2),
-  PRIMARY KEY (acronym, conference_name),
-  FOREIGN KEY (acronym) REFERENCES generated_author_info(acronym)
-)
+    CREATE TABLE IF NOT EXISTS field_conference (
+    major VARCHAR(255),
+    specialized_field VARCHAR(255),
+    conference_name VARCHAR(255),
+    PRIMARY KEY (specialized_field, conference_name)
+);
 "
 
 RSQLite::dbExecute(connection, query)
 
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM field_conference;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "field_conference", field_conference, append = TRUE, row.names = FALSE)
+  message("Data loaded into field_conference table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
 
-# usnews / data
-query <- "
-CREATE TABLE IF NOT EXISTS data (
-  institution_displayName VARCHAR(255),
-  institution_schoolType VARCHAR(255),
-  institution_aliasNames VARCHAR(255),
-  institution_state VARCHAR(255),
-  institution_city VARCHAR(255),
-  institution_zip INT,
-  institution_region VARCHAR(255),
-  institution_isPublic BOOL,
-  institution_institutionalControl VARCHAR(255),
-  institution_primaryPhotoCardThumb TEXT,
-  
-  
-  PRIMARY KEY (institution_displayName)
+result <- dbGetQuery(connection, "SELECT * FROM field_conference;")
+print(result)
 
-)
-"
-
-
+RSQLite::dbDisconnect(connection)
 ```
