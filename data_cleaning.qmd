@@ -61,31 +61,48 @@ library(dplyr)
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
+# Insert author_info
+# Retrieve vector of names already in csrankings
+csranking_names <- dbGetQuery(connection, "SELECT researcher_name FROM csrankings;")$researcher_name
+
 author_info_toInsert <- author_info %>% 
   distinct(name, .keep_all = TRUE) %>%
   select(name, dept) %>% 
-  filter(!(name %in% csrankings$name)) %>% 
+  filter(!(name %in% csranking_names)) %>% 
   rename(researcher_name = name,
-    affiliation = dept)
+      affiliation = dept)
 
-# remove the toInsert set to save time
+dbWriteTable(connection, "csrankings", author_info_toInsert, append = TRUE, row.names = FALSE)
+
+
+# Insert acm_fellows
+csranking_names <- dbGetQuery(connection, "SELECT researcher_name FROM csrankings;")$researcher_name
+
 acm_fellows_toInsert <- acm_fellows %>% 
   distinct(name) %>% 
-  filter(!(name %in% csrankings$name) & !(name %in% author_info$name)) %>% 
+  filter(!(name %in% csranking_names)) %>% 
   rename(researcher_name = name)
+
+dbWriteTable(connection, "csrankings", acm_fellows_toInsert, append = TRUE, row.names = FALSE)
+
+
+# Insert turing_awards
+csranking_names <- dbGetQuery(connection, "SELECT researcher_name FROM csrankings;")$researcher_name
 
 turing_awards_toInsert <- turing_awards %>% 
   distinct(name) %>% 
-  filter(!(name %in% csrankings$name) & !(name %in% author_info$name) & !(name %in% acm_fellows$name)) %>% 
+  filter(!(name %in% csranking_names)) %>% 
   rename(researcher_name = name)
 
-dbWriteTable(connection, "csrankings", author_info_toInsert, append = TRUE, row.names = FALSE)
-dbWriteTable(connection, "csrankings", acm_fellows_toInsert, append = TRUE, row.names = FALSE)
 dbWriteTable(connection, "csrankings", turing_awards_toInsert, append = TRUE, row.names = FALSE)
+
 
 result <- dbGetQuery(connection, "SELECT * FROM csrankings;")
 print(result)
 
 RSQLite::dbDisconnect(connection)
 ```
+
+
+## Task 3
 
