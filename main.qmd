@@ -4,7 +4,6 @@ format: html
 editor: visual
 ---
 
-<<<<<<< HEAD
 ## Libraries
 
 ```{r libraries}
@@ -12,129 +11,15 @@ install.packages("tidyr")
 install.packages("dplyr")
 install.packages("DBI")
 install.packages("readr")
-install.packages("RSQLites")
+install.packages("RSQLite")
 library(tidyr)
 library(readr)
 library(dplyr)
 library(DBI)
-=======
-## Load Datasets
-
-```{r load_data}
-library(readr)
-
-csrankings <- read_csv("datasets/csrankings.csv")
-author_info <- read_csv("datasets/generated-author-info.csv")
-acm_fellows <- read_csv("datasets/acm-fellows.csv")
-turing_awards <- read_csv("datasets/turing.csv")
-geolocation <- read_csv("datasets/geolocation.csv")
-country_info <- read_csv("datasets/country-info.csv")
-dblp_aliases <- read_csv("datasets/dblp-aliases.csv")
-conference_ranking <- read_csv("datasets/conference_ranking.csv")
-us_news <- read_csv("datasets/data.csv")
-field_conference <- read_csv("datasets/field_conference.csv")
-
-head(csrankings)
-head(author_info)
-head(acm_fellows)
-head(turing_awards)
-head(geolocation)
-head(country_info)
-head(dblp_aliases)
-head(conference_ranking)
-head(us_news)
-head(field_conference)
-```
-
-## Create and Load Databases
-
-### csrankings
-
-```{r split_name}
-library(tidyr)
-library(dplyr)
-
-# Separate names while keeping the original intact
-csrankings <- csrankings %>%
-  mutate(researcher_name = name) %>%
-  separate(
-    col = name,
-    into = c("first_name", "middle_name", "last_name"),
-    sep = " ", 
-    extra = "merge",  # Ensures last_name gets only the last word
-    fill = "right"    # Fills missing middle name with NA
-  )
-
-head(csrankings)
-```
-
-```{r csrankings}
-library(RSQLite)
-library(DBI)
-
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# csranking
-
-drop_check <- "DROP TABLE IF EXISTS csrankings;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-    CREATE TABLE IF NOT EXISTS csrankings (
-    researcher_name VARCHAR(255),
-    first_name VARCHAR(225),
-    middle_name VARCHAR(225),
-    last_name VARCHAR(225),
-    affiliation VARCHAR(255),
-    homepage VARCHAR(2048),
-    scholarid VARCHAR(16),
-    PRIMARY KEY (researcher_name)
-);"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "csrankings", csrankings, append = TRUE, row.names = FALSE)
-  message("Data loaded into csrankings table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM csrankings;")
-print(result)
-
-RSQLite::dbDisconnect(connection)
-```
-
-### acm_fellows
-
-```{r preprocess_acm_fellows1}
-acm_fellows <- acm_fellows %>%
-  mutate(researcher_name = name) %>%
-  extract(
-    col = name,
-    into = c("first_name", "middle_name", "last_name"),
-    regex = "^([^\\s]+)\\s+(?:(.*)\\s+)?([^\\s]+)$",
-  )
-head(acm_fellows)
-```
-
-```{r preprocess_acm_fellows2}
-# just a preference
-names(acm_fellows)[names(acm_fellows) == "year"] <- "award_year"
-
-colnames(acm_fellows)
-```
-
-```{r acm_fellows}
->>>>>>> origin/franz
 library(RSQLite)
 
 ```
 
-<<<<<<< HEAD
 ## Load Data
 
 ```{r load_datasets}
@@ -149,6 +34,17 @@ dblp_aliases <- read.csv("datasets/dblp-aliases.csv")
 conference_ranking <- read.csv("datasets/conference_ranking.csv")
 us_news <- read.csv("datasets/data.csv")
 field_conference <- read.csv("datasets/field_conference.csv")
+
+head(csrankings)
+head(author_info)
+head(acm_fellows)
+head(turing_awards)
+head(geolocation)
+head(country_info)
+head(dblp_aliases)
+head(conference_ranking)
+head(us_news)
+head(field_conference)
 ```
 
 ## CS Ranking
@@ -303,21 +199,14 @@ connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
 drop_check <- "DROP TABLE IF EXISTS acm_fellows;"
 
-=======
-drop_check <- "DROP TABLE IF EXISTS acm_fellows;"
-
->>>>>>> origin/franz
 RSQLite::dbExecute(connection, drop_check)
 
 query <- "
 CREATE TABLE IF NOT EXISTS acm_fellows (
-  researcher_name VARCHAR(255),
-  first_name VARCHAR(255),
-  middle_name VARCHAR(255),
-  last_name VARCHAR(255),
-  award_year INT,
-  PRIMARY KEY (researcher_name, award_year),
-  FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name)
+    researcher_name VARCHAR(255),
+    award_year INT,
+    PRIMARY KEY (researcher_name, award_year),
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );"
 
 RSQLite::dbExecute(connection, query)
@@ -334,7 +223,6 @@ if (row_count$count == 0) {
 result <- dbGetQuery(connection, "SELECT * FROM acm_fellows;")
 print(result)
 
-<<<<<<< HEAD
 RSQLite::dbExecute(connection, query)
 
 ```
@@ -387,45 +275,146 @@ query <- "
     PRIMARY KEY (researcher_name, dept, area, publication_year),
     FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
     FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
-=======
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM generated_author_info;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "generated_author_info", author_info, append = TRUE, row.names = FALSE)
+  message("Data loaded into generated_author_info table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM generated_author_info;")
+print(result)
+
 RSQLite::dbDisconnect(connection)
+
 ```
 
-### country_info
+## DBLP Aliases
 
-```{r country_info}
-library(RSQLite)
+### Create and Load Data
+
+```{r dblp aliases}
+names(dblp_aliases)[names(dblp_aliases) == "name"] <- "researcher_name"
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# dblp aliases
 
-drop_check <- "DROP TABLE IF EXISTS country_info;"
+drop_check <- "DROP TABLE IF EXISTS dblp_aliases;"
 
 RSQLite::dbExecute(connection, drop_check)
 
-
-# country_info
 query <- "
-CREATE TABLE IF NOT EXISTS country_info (
-  institution VARCHAR(255),
-  region VARCHAR(255),
-  countryabbrv VARCHAR(16),
-  PRIMARY KEY (institution),
-  FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
+    CREATE TABLE IF NOT EXISTS dblp_aliases (
+    alias VARCHAR(255),
+    researcher_name VARCHAR(255),
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );
 "
 
 RSQLite::dbExecute(connection, query)
 
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM country_info;")
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM dblp_aliases;")
 if (row_count$count == 0) {
   # Only load the data if the table is empty
-  dbWriteTable(connection, "country_info", country_info, append = TRUE, row.names = FALSE)
-  message("Data loaded into country_info table.")
+  dbWriteTable(connection, "dblp_aliases", dblp_aliases, append = TRUE, row.names = FALSE)
+  message("Data loaded into dblp_aliases table.")
 } else {
   message("Table already contains data. Skipping data load.")
 }
 
-result <- dbGetQuery(connection, "SELECT * FROM country_info;")
+dupes <- dbGetQuery(connection, "SELECT researcher_name, alias, count(*) as COUNT FROM dblp_aliases GROUP BY researcher_name, alias HAVING COUNT > 1;")
+print(dupes)
+
+RSQLite::dbDisconnect(connection)
+
+```
+
+## Turing
+
+### Create and Load Data
+
+```{r turing}
+
+names(turing_awards)[names(turing_awards) == "name"] <- "researcher_name"
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+# turing awards
+
+drop_check <- "DROP TABLE IF EXISTS turing;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS turing (
+    researcher_name VARCHAR(255),
+    year INT,
+    PRIMARY KEY (researcher_name, year)
+    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE
+);
+"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM turing;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "turing", turing_awards, append = TRUE, row.names = FALSE)
+  message("Data loaded into turing table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM turing;")
+print(result)
+
+RSQLite::dbDisconnect(connection)
+
+```
+
+## Conference Field
+
+### Create and Load Data
+
+```{r conference_field}
+# head(field_conference)
+
+
+names(field_conference)[names(field_conference) == "field"] <- "specialized_field"
+names(field_conference)[names(field_conference) == "conference"] <- "conference_name"
+
+connection <- dbConnect(SQLite(), "csrankings.db")
+
+drop_check <- "DROP TABLE IF EXISTS field_conference;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS field_conference (
+    major VARCHAR(255),
+    specialized_field VARCHAR(255),
+    conference_name VARCHAR(255),
+    PRIMARY KEY (specialized_field, conference_name)
+);
+"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM field_conference;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "field_conference", field_conference, append = TRUE, row.names = FALSE)
+  message("Data loaded into field_conference table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM field_conference;")
 print(result)
 
 RSQLite::dbDisconnect(connection)
@@ -447,9 +436,6 @@ head(conference_ranking)
 ```
 
 ```{r conference_ranking}
-library(RSQLite)
-library(DBI)
-
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
 
@@ -472,7 +458,7 @@ CREATE TABLE IF NOT EXISTS conference_ranking (
 RSQLite::dbExecute(connection, query)
 
 
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM conference_rankings;")
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM conference_ranking;")
 if (row_count$count == 0) {
   # Only load the data if the table is empty
   dbWriteTable(connection, "conference_ranking", conference_ranking, append = TRUE, row.names = FALSE)
@@ -487,7 +473,7 @@ print(result)
 # Scrape academic_society column
 
 query <- "
-UPDATE conference_rankings
+UPDATE conference_ranking
 SET academic_society = CASE
     WHEN (conference_name LIKE '%ACM%' AND conference_name LIKE '%IEEE%') THEN 'ACM+IEEE'
     WHEN conference_name LIKE 'ACM%' THEN 'ACM'
@@ -498,7 +484,7 @@ END;
 
 RSQLite::dbExecute(connection, query)
 
-result <- dbGetQuery(connection, "SELECT * FROM conference_rankings;")
+result <- dbGetQuery(connection, "SELECT * FROM conference_ranking;")
 print(result)
 
 RSQLite::dbDisconnect(connection)
@@ -513,7 +499,6 @@ result %>%
   arrange(desc(n))
 ```
 
-
 ### us_news
 
 ```{r preprocess_us_news}
@@ -525,11 +510,7 @@ colnames(us_news) <- gsub("\\.", "_", colnames(us_news))
 colnames(us_news)
 ```
 
-
 ```{r us_news}
-library(RSQLite)
-library(DBI)
-
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
 drop_check <- "DROP TABLE IF EXISTS us_news;"
@@ -586,320 +567,4 @@ if (row_count$count == 0) {
 
 result <- dbGetQuery(connection, "SELECT * FROM us_news;")
 print(result)
-```
-
-### geolocation
-
-```{r geolocation}
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# geolocation
-
-drop_check <- "DROP TABLE IF EXISTS geolocation;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-    CREATE TABLE IF NOT EXISTS  geolocation (
-    institution VARCHAR(255),
-    latitude DOUBLE,
-    longitude DOUBLE,
-    PRIMARY KEY (institution),
-    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
->>>>>>> origin/franz
-);"
-
-RSQLite::dbExecute(connection, query)
-
-<<<<<<< HEAD
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM generated_author_info;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "generated_author_info", author_info, append = TRUE, row.names = FALSE)
-  message("Data loaded into generated_author_info table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM generated_author_info;")
-print(result)
-
-RSQLite::dbDisconnect(connection)
-
-```
-
-## DBLP Aliases
-
-### Create and Load Data
-
-```{r dblp aliases}
-names(dblp_aliases)[names(dblp_aliases) == "name"] <- "researcher_name"
-
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# dblp aliases
-
-drop_check <- "DROP TABLE IF EXISTS dblp_aliases;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-=======
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM geolocation;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "geolocation", geolocation, append = TRUE, row.names = FALSE)
-  message("Data loaded into geolocation table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM geolocation;")
-print(result)
-
-RSQLite::dbExecute(connection, query)
-```
-
-
-### generated_author_info
-
-```{r prepocess_generated_author_info}
-
-names(author_info)[names(author_info) == "name"] <- "researcher_name"
-names(author_info)[names(author_info) == "year"] <- "publication_year"
-
-# The regex explained:
-#   ^([^\\s]+)       -> Matches the first token (first name) at the start.
-#   \\s+             -> One or more spaces.
-#   (?:(.*)\\s+)?    -> Optionally matches the middle part (middle name(s)) followed by space.
-#   ([^\\s]+)$       -> Matches the last token (last name) at the end.
-author_info <- author_info %>%
-  extract(
-    col = researcher_name,
-    into = c("first_name", "middle_name", "last_name"),
-    regex = "^([A-Za-zÀ-ÿ'\\-]+\\.?)(\\s+\\(?[A-Za-zÀ-ÿ'\\-\\s]+\\)?\\.?)*\\s+([A-Za-zÀ-ÿ'\\-]+(?:\\s+\\d{1,4})*)$",
-    remove = FALSE 
-  )
-```
-
-
-```{r generated_author_info}
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# author_info
-
-drop_check <- "DROP TABLE IF EXISTS generated_author_info;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-# author_info
-query <- "
-    CREATE TABLE IF NOT EXISTS generated_author_info (
-    researcher_name VARCHAR(255),
-    first_name VARCHAR(225),
-    middle_name VARCHAR(225),
-    last_name VARCHAR(225),
-    dept VARCHAR(255),
-    area VARCHAR(16),
-    count INT,
-    adjustedcount DOUBLE,
-    publication_year INT,
-    PRIMARY KEY (researcher_name, dept, area, publication_year),
-    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
-    FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
-);"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM generated_author_info;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "generated_author_info", author_info, append = TRUE, row.names = FALSE)
-  message("Data loaded into generated_author_info table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM generated_author_info;")
-print(result)
-
-RSQLite::dbDisconnect(connection)
-
-```
-
-
-
-### dblp_aliases
-
-```{r dblp aliases}
-names(dblp_aliases)[names(dblp_aliases) == "name"] <- "researcher_name"
-
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# dblp aliases
-
-drop_check <- "DROP TABLE IF EXISTS dblp_aliases;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
->>>>>>> origin/franz
-    CREATE TABLE IF NOT EXISTS dblp_aliases (
-    alias VARCHAR(255),
-    researcher_name VARCHAR(255),
-    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM dblp_aliases;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "dblp_aliases", dblp_aliases, append = TRUE, row.names = FALSE)
-  message("Data loaded into dblp_aliases table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-dupes <- dbGetQuery(connection, "SELECT researcher_name, alias, count(*) as COUNT FROM dblp_aliases GROUP BY researcher_name, alias HAVING COUNT > 1;")
-print(dupes)
-
-RSQLite::dbDisconnect(connection)
-
-```
-
-<<<<<<< HEAD
-## Turing
-
-### Create and Load Data
-
-```{r turing}
-
-=======
-
-### turing
-
-```{r turing}
->>>>>>> origin/franz
-names(turing_awards)[names(turing_awards) == "name"] <- "researcher_name"
-
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-# turing awards
-
-drop_check <- "DROP TABLE IF EXISTS turing;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-    CREATE TABLE IF NOT EXISTS turing (
-    researcher_name VARCHAR(255),
-    year INT,
-    PRIMARY KEY (researcher_name, year)
-    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM turing;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "turing", turing_awards, append = TRUE, row.names = FALSE)
-  message("Data loaded into turing table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM turing;")
-print(result)
-<<<<<<< HEAD
-
-RSQLite::dbDisconnect(connection)
-=======
->>>>>>> origin/franz
-
-RSQLite::dbDisconnect(connection)
-```
-
-<<<<<<< HEAD
-## Conference Field
-
-### Create and Load Data
-
-```{r conference_field}
-# head(field_conference)
-=======
-### field_conference
->>>>>>> origin/franz
-
-```{r field_conference}
-library(dplyr)
-library(DBI)
-
-<<<<<<< HEAD
-names(field_conference)[names(field_conference) == "field"] <- "specialized_field"
-names(field_conference)[names(field_conference) == "conference"] <- "conference_name"
-=======
-head(field_conference)
-
-connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
-
-drop_check <- "DROP TABLE IF EXISTS field_conference;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-CREATE TABLE IF NOT EXISTS field_conference (
-  major VARCHAR(16),
-  field VARCHAR(100),
-  conference VARCHAR(50),
-  PRIMARY KEY (conference)
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM field_conference;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "field_conference", field_conference, append = TRUE, row.names = FALSE)
-  message("Data loaded into field_conference table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM field_conference;")
-print(result)
-
-RSQLite::dbDisconnect(connection)
-```
->>>>>>> origin/franz
-
-connection <- dbConnect(SQLite(), "csrankings.db")
-
-drop_check <- "DROP TABLE IF EXISTS field_conference;"
-
-RSQLite::dbExecute(connection, drop_check)
-
-query <- "
-    CREATE TABLE IF NOT EXISTS field_conference (
-    major VARCHAR(255),
-    specialized_field VARCHAR(255),
-    conference_name VARCHAR(255),
-    PRIMARY KEY (specialized_field, conference_name)
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM field_conference;")
-if (row_count$count == 0) {
-  # Only load the data if the table is empty
-  dbWriteTable(connection, "field_conference", field_conference, append = TRUE, row.names = FALSE)
-  message("Data loaded into field_conference table.")
-} else {
-  message("Table already contains data. Skipping data load.")
-}
-
-result <- dbGetQuery(connection, "SELECT * FROM field_conference;")
-print(result)
-
-RSQLite::dbDisconnect(connection)
 ```
