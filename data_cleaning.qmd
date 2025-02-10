@@ -3,3 +3,41 @@ title: "data_cleaning"
 format: html
 ---
 
+## Task 1
+
+Check if the names of the authors in generated_author_info, acm_fellows, and turing also appear in csrankings.csv table.
+
+```{r load_tables}
+library(readr)
+
+csrankings <- read_csv("datasets/csrankings.csv")
+author_info <- read_csv("datasets/generated-author-info.csv")
+acm_fellows <- read_csv("datasets/acm-fellows.csv")
+turing_awards <- read_csv("datasets/turing.csv")
+
+head(csrankings)
+head(author_info)
+head(acm_fellows)
+head(turing_awards)
+```
+
+```{r check_names}
+library(dplyr)
+
+# Check author_info names not in CS rankings
+author_info %>% 
+  distinct(name) %>% 
+  filter(!(name %in% csrankings$name))
+
+# Check acm_fellows names not in CS rankings
+acm_fellows %>% 
+  distinct(name) %>% 
+  filter(!(name %in% csrankings$name))
+
+# Check turing_awards names not in CS rankings
+turing_awards %>% 
+  distinct(name) %>% 
+  filter(!(name %in% csrankings$name))
+```
+
+
