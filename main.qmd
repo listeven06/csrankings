@@ -774,7 +774,7 @@ connection <- dbConnect(SQLite(),"csrankings.db")
 
 query <- "
     SELECT researcher_name, COUNT(*) AS COUNT FROM csrankings
-    GROUP BY first_name, middle_name, last_name, affiliation, scholarid
+    GROUP BY scholarid
     HAVING COUNT > 1;
 "
 
@@ -798,7 +798,7 @@ connection <- dbConnect(SQLite(), "csrankings.db")
 query <- "
 UPDATE csrankings
 SET first_name = researcher_name
-WHERE first_name IS NULL AND middle_name IS NULL AND last_name IS NULL AND researcher_name NOT LIKE '% %';
+WHERE researcher_name = 'Arvind';
 "
 
 test <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE researcher_name NOT LIKE '% %';")
@@ -822,4 +822,16 @@ dup_results <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE first_name
 cat("Duplicates detected:\n")
 print(dup_results)
 
+
+test <- "
+    SELECT researcher_name, first_name, last_name, scholarid, COUNT(*) as count
+    FROM csrankings
+    GROUP BY scholarid
+    HAVING count > 1;
+"
+
+results <- dbGetQuery(connection, test)
+print(results)
 ```
+
+\
