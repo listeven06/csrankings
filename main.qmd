@@ -264,134 +264,79 @@ print(result)
 
 
 RSQLite::dbDisconnect(connection)
-
 ```
 
-## Create Database
+### us_news
 
-```{r create_database}
+```{r preprocess_us_news}
+colnames(us_news)
+
+# Replace dots with underscores in column names
+colnames(us_news) <- gsub("\\.", "_", colnames(us_news))
+
+colnames(us_news)
+```
+
+
+```{r us_news}
 library(RSQLite)
+library(DBI)
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
+drop_check <- "DROP TABLE IF EXISTS us_news;"
 
-# generated_author_info
-query <- "
-CREATE TABLE IF NOT EXISTS generated_author_info (
-    researcher_name VARCHAR(255),
-    dept VARCHAR(255),
-    area VARCHAR(16),
-    count INT,
-    adjustedcount DOUBLE,
-    publication_year INT,
-    PRIMARY KEY (researcher_name),
-    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
-    FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
-);"
-
-RSQLite::dbExecute(connection, query)
-
-
-# geolocation
-query <- "
-CREATE TABLE IF NOT EXISTS  geolocation (
-    institution VARCHAR(255),
-    latitude DOUBLE,
-    longitude DOUBLE,
-    PRIMARY KEY (institution),
-    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
-);"
-
-RSQLite::dbExecute(connection, query)
-
-
-# country_info
-query <- "
-CREATE TABLE IF NOT EXISTS country_info (
-    institution VARCHAR(255),
-    region VARCHAR(255),
-    countryabbrv VARCHAR(16),
-    PRIMARY KEY (institution),
-    FOREIGN KEY (institution) REFERENCES csrankings(affiliation) ON DELETE SET NULL
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-
-# dblp_aliases
-query <- "
-CREATE TABLE IF NOT EXISTS dblp_aliases (
-    alias VARCHAR(255),
-    researcher_name VARCHAR(255),
-    PRIMARY KEY (researcher_name, alias),
-    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
-);
-"
-
-RSQLite::dbExecute(connection, query)
-
-RSQLite::dbDisconnect(connection)
-```
-
-```{r create_database2}
-connection <- dbConnect(SQLite(), "csrankings.db")
-
-
-# conference_ranking
-query <- "
-CREATE TABLE IF NOT EXISTS conference_ranking (
-  acronym VARCHAR(16),
-  conference_name VARCHAR(255),
-  rank VARCHAR(2),
-  PRIMARY KEY (acronym, conference_name),
-  FOREIGN KEY (acronym) REFERENCES generated_author_info(acronym)
-)
-"
-
-RSQLite::dbExecute(connection, query)
-
+RSQLite::dbExecute(connection, drop_check)
 
 # usnews / data
 query <- "
-CREATE TABLE IF NOT EXISTS data (
+CREATE TABLE IF NOT EXISTS us_news (
   institution_displayName VARCHAR(255),
   institution_schoolType VARCHAR(255),
-  institution_aliasNames VARCHAR(255),
+  institution_aliasNames TEXT,
   institution_state VARCHAR(50),
   institution_city VARCHAR(255),
-  institution_zip INT,
+  institution_zip VARCHAR(10),
   institution_region VARCHAR(50),
   institution_isPublic BOOLEAN,
   institution_institutionalControl VARCHAR(255),
   institution_primaryPhotoCardThumb TEXT,
-  ranking_displayRank VARCHAR(255),
+
+  ranking_displayRank VARCHAR(50),
   ranking_sortRank INT,
-  searchData_actAvg_rawValue FLOAT,
-  searchData_percentReceivingAid_rawValue FLOAT,
-  searchData_acceptanceRate_rawValue FLOAT,
-  searchData_tuition_rawValue FLOAT,
-  searchData_hsGpaAvg_rawValue FLOAT,
+  ranking_isTied BOOLEAN,
+
+  searchData_actAvg_rawValue DECIMAL(4,1),
+  searchData_percentReceivingAid_rawValue DECIMAL(5,2),
+  searchData_acceptanceRate_rawValue DECIMAL(5,2),
+  searchData_tuition_rawValue INT,
+  searchData_hsGpaAvg_rawValue DECIMAL(3,2),
   searchData_engineeringRepScore_rawValue TEXT,
   searchData_parentRank_rawValue TEXT,
   searchData_enrollment_rawValue INT,
   searchData_businessRepScore_rawValue TEXT,
-  searchData_satAvg_rawValue TEXT,
-  searchData_costAfterAid_rawValue FLOAT,
+  searchData_satAvg_rawValue INT,
+  searchData_costAfterAid_rawValue INT,
   searchData_testAvgs_displayValue_0_value VARCHAR(255),
   searchData_testAvgs_displayValue_1_value VARCHAR(255),
+
   PRIMARY KEY (institution_displayName)
 );
 "
 
 RSQLite::dbExecute(connection, query)
 
-query <- "
-CREATE TABLE IF NOT EXISTS field_conference (
-  major VARCHAR(255),
-  field VARCHAR(255),
-  conference VARCHAR(255),
-  PRIMARY KEY (conference, field)
-)
-"
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM us_news;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "us_news", us_news, append = TRUE, row.names = FALSE)
+  message("Data loaded into us_news table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM us_news;")
+print(result)
 ```
+
