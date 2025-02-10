@@ -106,3 +106,62 @@ RSQLite::dbDisconnect(connection)
 
 ## Task 3
 
+Determine if rows represent the same individual, then create a new table cs_ranking_clean where those individuals are merged onto a single row.
+
+Group by (first initial, last name)
+1) create first_initial column
+2) group_by
+3) summarize function, get max string length
+
+```{r merge_duplicate_individuals}
+library(RSQLite)
+library(DBI)
+library(dplyr)
+library(stringr)
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+
+csrankings <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+head(csrankings)
+
+csrankings_clean <- csrankings %>% 
+  group_by(scholarid) %>% 
+  summarize(
+    researcher_name = researcher_name[which.max(nchar(researcher_name))],
+    homepage = first(homepage),
+    affiliation = first(affiliation)
+  )
+
+
+drop_check <- "DROP TABLE IF EXISTS csrankings_clean;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS csrankings_clean (
+    researcher_name VARCHAR(255),
+    affiliation VARCHAR(255),
+    homepage VARCHAR(2048),
+    scholarid VARCHAR(16),
+    PRIMARY KEY (researcher_name)
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings_clean;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "csrankings_clean", csrankings_clean, append = TRUE, row.names = FALSE)
+  message("Data loaded into csrankings_clean table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+result <- dbGetQuery(connection, "SELECT * FROM csrankings_clean;")
+print(result)
+
+RSQLite::dbDisconnect(connection)
+
+
+```
+
