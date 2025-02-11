@@ -46,6 +46,8 @@ head(us_news)
 head(field_conference)
 ```
 
+# Task 2
+
 ## CS Ranking
 
 ### Split Names
@@ -276,8 +278,8 @@ query <- "
     adjustedcount DOUBLE,
     publication_year INT,
     PRIMARY KEY (researcher_name, dept, area, publication_year),
-    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
-    FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE,
+    FOREIGN KEY (dept) REFERENCES csrankings(affiliation) ON DELETE SET NULL
 );"
 
 RSQLite::dbExecute(connection, query)
@@ -358,7 +360,7 @@ query <- "
     researcher_name VARCHAR(255),
     year INT,
     PRIMARY KEY (researcher_name, year)
-    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE
+    FOREIGN KEY (researcher_name) REFERENCES csrankings(researcher_name) ON DELETE CASCADE
 );
 "
 
@@ -952,17 +954,17 @@ library(stringr)
 
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
-csranking <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+csrankings <- dbGetQuery(connection, "SELECT * FROM csrankings;")
 
 dbDisconnect(connection)
 
 # Step 0. Clean scholarid field
-csranking_clean <- csranking %>%
+csrankings_clean <- csrankings %>%
   mutate(scholarid = ifelse(scholarid == "NOSCHOLARPAGE", NA, scholarid))
 
 # Step 1. Split the data into two groups
-group_with_id <- csranking_clean %>% filter(!is.na(scholarid)) #25048
-group_without_id <- csranking_clean %>% filter(is.na(scholarid)) #6166
+group_with_id <- csrankings_clean %>% filter(!is.na(scholarid)) #25048
+group_without_id <- csrankings_clean %>% filter(is.na(scholarid)) #6166
 
 # Step 2. Process group with scholarid
 duplicate_with_id <- group_with_id %>%
@@ -1023,11 +1025,11 @@ print(duplicate_authors)
 
 ## Task 3.4
 
-```{r clean_csranking}
+```{r clean_csrankings}
 
-# Assume csranking_clean already exists from earlier steps (with scholarid cleaned)
-# (i.e. csranking_clean was produced as:)
-# csranking_clean <- csranking %>%
+# Assume csrankings_clean already exists from earlier steps (with scholarid cleaned)
+# (i.e. csrankings_clean was produced as:)
+# csrankings_clean <- csrankings %>%
 #   mutate(scholarid = ifelse(scholarid == "NOSCHOLARPAGE", NA, scholarid))
 
 # -------------------------------------------------------------------
@@ -1045,7 +1047,7 @@ merge_longest <- function(x) {
 # 2. Create a merge key for each record.
 # For records with a scholarid, we use that;
 # for records without a scholarid, we compute a normalized name key.
-csranking_keyed <- csranking_clean %>%
+csrankings_keyed <- csrankings_clean %>%
   mutate(merge_key = if_else(!is.na(scholarid),
                              scholarid,
                              if_else(!is.na(last_name) & last_name != "",
@@ -1060,7 +1062,7 @@ csranking_keyed <- csranking_clean %>%
 # 3. Group by the merge key and merge (summarise) the attributes.
 # For most attributes we use merge_longest().
 # For researcher_name we also collect all distinct names so that we can record synonyms.
-csranking_clean <- csranking_keyed %>%
+csrankings_clean <- csrankings_keyed %>%
   group_by(merge_key) %>%
   summarise(
     # For researcher_name we first collect all distinct non-NA names...
@@ -1085,7 +1087,7 @@ csranking_clean <- csranking_keyed %>%
   # Optionally, drop the merge key and the temporary researcher_name_all list:
   select(-merge_key, -researcher_name_all, -synonym)
 
-print(csranking_clean)
+print(csrankings_clean)
 
 ```
 
@@ -1148,7 +1150,7 @@ RSQLite::dbExecute(connection, query)
 row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings_clean;")
 if (row_count$count == 0) {
   # Only load the data if the table is empty
-  dbWriteTable(connection, "csrankings_clean", csranking_clean, append = TRUE, row.names = FALSE)
+  dbWriteTable(connection, "csrankings_clean", csrankings_clean, append = TRUE, row.names = FALSE)
   message("Data loaded into csrankings_clean table.")
 } else {
   message("Table already contains data. Skipping data load.")
@@ -1196,3 +1198,5 @@ RSQLite::dbDisconnect(connection)
 ```
 
 `generated_author_info_clean` table has unique (primary_author, publication_year). This means that there will not be multiple rows (entries) that are referring to the same person within that publication year showing up more than once. Ifthe same author shows up by 2 or more different names, we merged them and used the our `duplicate_authors` data frame to create a synonym map that helps map the primary_author to their respective other names. By doing so, our `generated_author_info_clean` would need to add the counts together of those who show up in multiple rows.`generated_author_info_clean` does not contain `adjustedCount` because we simply can't add them up. It's more complicated than that so we left it out. So in total, we have 8 columns: `researcher_name, first_name, middle_name, last_name, dept, area, count, and publication_year` .
+
+# Task 4.1
