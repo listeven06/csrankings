@@ -787,7 +787,11 @@ dbDisconnect(connection)
 
 ## Rationale
 
-We implemented a very simple duplicate detection method, relying on matching four key attributes: first name, last name, scholarid, and affiliation. The idea is that if there are two or more records having the same value for these fields, they very likely refer to the same individual. The list of authors' names, with their scholarid and affiliation listed, for example, "Michael Carey" - "12345" - "XYZ University" - and other records showing the same "Michael Carey" with the exact scholarid and affiliation, get marked as a duplicate. For the identified sets of probable duplicates, we used this method to resolve them: keep just one record of each and removes the additional rows from the table csranking. This methodology cleans the dataset, providing one record per researcher with no duplication. Though it is a very simple approach, it would work if the data is very organized and if the four chosen attributes are being consistently captured. This will provide a strict and straightforward rule for duplicate detection.
+First we tried to implement a very simple duplicate detection method, relying on matching four key attributes: first name, last name, scholarid, and affiliation. The idea is that if there are two or more records having the same value for these fields, they very likely refer to the same individual. The list of authors' names, with their scholarid and affiliation listed, for example, "Michael Carey" - "12345" - "XYZ University" - and other records showing the same "Michael Carey" with the exact scholarid and affiliation, get marked as a duplicate. For the identified sets of probable duplicates, we used this method to resolve them: keep just one record of each and removes the additional rows from the table csranking. This methodology cleans the dataset, providing one record per researcher with no duplication. Though it is a very simple approach, it would work if the data is very organized and if the four chosen attributes are being consistently captured. However, there was a glaring problem: there were entries that had no scholarid. Either it was NULL value or 'NOSCHOLARPAGE'. This made it very difficult to detect duplicate authors given our initial simple approach.
+
+We then used a method that first splitting the records into two groups: those with a scholar ID and those without. For the group with a scholar ID, any records sharing the same ID are treated as duplicates, and the one with the most complete name information is chosen as the main entry while the other variations are noted as duplicates. For the records without a scholar ID, a simple name-based key is created—by taking the first letter of the first name and a cleaned-up version of the last name—to group together similar names (for example, "Michael Carey," "M. Carey," and "Michael Carey001" all end up in the same group). Within each of these groups, the entry with the most detailed information is selected as the primary record, and the other names are recorded as duplicates.
+
+The idea is that the record with the most detailed information is the one where the names are written out most completely. For instance, if one record shows "Michael Carey" and another shows "M. Carey" or "Michael Carey001," we assume that "Michael Carey" is more detailed because it spells out the name fully without abbreviations or extra numbers. We look at each part of the name—first, middle, and last—and judge detail by how much text is present; a longer version generally indicates that more information was provided. So, among duplicate entries, the one with the longest and most complete name fields is chosen as the primary record, while the shorter or less complete versions are recorded as duplicates.
 
 ## Cleaning Names
 
@@ -934,13 +938,13 @@ print(example_results)
 print(null_results)
 ```
 
-## Task 3.3 & 3.4
+## Task 3.3
 
 Determine if rows represent the same individual, then create a new table cs_ranking_clean where those individuals are merged onto a single row.
 
 Group by (first initial, last name) 1) create first_initial column 2) group_by 3) summarize function, get max string length
 
-```{r merge_duplicate_individuals}
+```{r duplicate_author}
 library(RSQLite)
 library(DBI)
 library(dplyr)
@@ -949,6 +953,8 @@ library(stringr)
 connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
 
 csranking <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+
+dbDisconnect(connection)
 
 # Step 0. Clean scholarid field
 csranking_clean <- csranking %>%
@@ -968,7 +974,7 @@ duplicate_with_id <- group_with_id %>%
   group_by(scholarid) %>%
   # Sort descending by info score so that the record with the most information comes first
   arrange(desc(info)) %>%
-  # Summarise by taking the first (best) record as the canonical name and 
+  # Summarise by taking the first (best) record as the author name and 
   # combining the other names (if any) as synonyms.
   summarise(
     author = first(researcher_name),
@@ -1009,8 +1015,184 @@ duplicate_without_id <- group_without_id %>%
   select(-count)
 
 # Step 4. Combine the duplicate groups from both sets
-duplicate_authors <- bind_rows(duplicate_with_id, duplicate_without_id)
+duplicate_authors <- bind_rows(duplicate_with_id, duplicate_without_id) #4782
 
 print(duplicate_authors)
 
 ```
+
+## Task 3.4
+
+```{r clean_csranking}
+
+# Assume csranking_clean already exists from earlier steps (with scholarid cleaned)
+# (i.e. csranking_clean was produced as:)
+# csranking_clean <- csranking %>%
+#   mutate(scholarid = ifelse(scholarid == "NOSCHOLARPAGE", NA, scholarid))
+
+# -------------------------------------------------------------------
+# 1. Define a helper function that merges a vector of strings by taking the longest.
+merge_longest <- function(x) {
+  # Remove duplicates and any NA values
+  x <- unique(na.omit(x))
+  if(length(x) == 0) return(NA_character_)
+  if(length(x) == 1) return(x)
+  # Otherwise, choose the string with the most characters (ties: the first maximum)
+  x[which.max(nchar(x))]
+}
+
+# -------------------------------------------------------------------
+# 2. Create a merge key for each record.
+# For records with a scholarid, we use that;
+# for records without a scholarid, we compute a normalized name key.
+csranking_keyed <- csranking_clean %>%
+  mutate(merge_key = if_else(!is.na(scholarid),
+                             scholarid,
+                             if_else(!is.na(last_name) & last_name != "",
+                                     paste0(tolower(substr(first_name, 1, 1)),
+                                            tolower(gsub("[[:punct:][:digit:]]", "", last_name))),
+                                     # If no last name is available, use a cleaned version of the middle name
+                                     tolower(gsub("[[:punct:][:digit:]]", "", middle_name)))
+                             )
+         )
+
+# -------------------------------------------------------------------
+# 3. Group by the merge key and merge (summarise) the attributes.
+# For most attributes we use merge_longest().
+# For researcher_name we also collect all distinct names so that we can record synonyms.
+csranking_clean <- csranking_keyed %>%
+  group_by(merge_key) %>%
+  summarise(
+    # For researcher_name we first collect all distinct non-NA names...
+    researcher_name_all = list(unique(researcher_name[!is.na(researcher_name)])),
+    # ...then choose the one with the most characters as the primary name.
+    researcher_name = merge_longest(researcher_name),
+    # Any other names (if present) become synonyms.
+    synonym = {
+      all_names <- unique(researcher_name[!is.na(researcher_name)])
+      primary <- merge_longest(researcher_name)
+      other_names <- setdiff(all_names, primary)
+      if(length(other_names) == 0) NA_character_ else paste(other_names, collapse = ", ")
+    },
+    first_name   = merge_longest(first_name),
+    middle_name  = merge_longest(middle_name),
+    last_name    = merge_longest(last_name),
+    affiliation  = merge_longest(affiliation),
+    homepage     = merge_longest(homepage),
+    scholarid    = merge_longest(scholarid)
+  ) %>%
+  ungroup() %>%
+  # Optionally, drop the merge key and the temporary researcher_name_all list:
+  select(-merge_key, -researcher_name_all, -synonym)
+
+print(csranking_clean)
+
+```
+
+## Task 3.5
+
+```{r clean_generated_author_info}
+
+synonym_map <- duplicate_authors %>%
+  separate_rows(synonym, sep = ", ") %>%
+  select(researcher_name = synonym, primary_author = author) %>%
+  bind_rows(data.frame(researcher_name = duplicate_authors$author, 
+                       primary_author = duplicate_authors$author)) %>%
+  distinct()
+
+generated_author_info_clean <- author_info %>%
+  left_join(synonym_map, by = "researcher_name") %>%
+  mutate(primary_author = coalesce(primary_author, researcher_name)) %>%
+  
+  # Step 2. Group by the primary author and publication year
+  group_by(primary_author, publication_year) %>%
+  
+  # Step 3. Summarise by summing the counts and picking representative values for the other columns.
+  summarise(
+    count       = sum(count, na.rm = TRUE),
+    first_name  = first(first_name),
+    middle_name = first(middle_name),
+    last_name   = first(last_name),
+    dept        = first(dept),
+    area        = first(area),
+    .groups     = "drop"
+  )
+
+head(generated_author_info_clean,20)
+
+
+```
+
+```{r create_clean_SQL_tables}
+
+connection = dbConnect(SQLite(), 'csrankings.db')
+
+drop_check <- "DROP TABLE IF EXISTS csrankings_clean;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+query <- "
+    CREATE TABLE IF NOT EXISTS csrankings_clean (
+    researcher_name VARCHAR(255),
+    first_name VARCHAR(225),
+    middle_name VARCHAR(225),
+    last_name VARCHAR(225),
+    affiliation VARCHAR(255),
+    homepage VARCHAR(2048),
+    scholarid VARCHAR(16),
+    PRIMARY KEY (researcher_name)
+);"
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings_clean;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "csrankings_clean", csrankings_clean, append = TRUE, row.names = FALSE)
+  message("Data loaded into csrankings_clean table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+
+
+
+names(generated_author_info_clean)[names(generated_author_info_clean) == "primary_author"] <- "researcher_name"
+
+drop_check <- "DROP TABLE IF EXISTS generated_author_info_clean;"
+
+RSQLite::dbExecute(connection, drop_check)
+
+# author_info
+query <- "
+    CREATE TABLE IF NOT EXISTS generated_author_info_clean (
+    researcher_name VARCHAR(255),
+    first_name VARCHAR(225),
+    middle_name VARCHAR(225),
+    last_name VARCHAR(225),
+    dept VARCHAR(255),
+    area VARCHAR(16),
+    count INT,
+    publication_year INT,
+    PRIMARY KEY (researcher_name, dept, area, publication_year),
+    FOREIGN KEY (researcher_name) REFERENCES csranking(researcher_name) ON DELETE CASCADE,
+    FOREIGN KEY (dept) REFERENCES csranking(affiliation) ON DELETE SET NULL
+);"
+
+
+RSQLite::dbExecute(connection, query)
+
+row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM generated_author_info_clean;")
+if (row_count$count == 0) {
+  # Only load the data if the table is empty
+  dbWriteTable(connection, "generated_author_info_clean", generated_author_info_clean, append = TRUE, row.names = FALSE)
+  message("Data loaded into generated_author_info_clean table.")
+} else {
+  message("Table already contains data. Skipping data load.")
+}
+
+RSQLite::dbDisconnect(connection)
+
+```
+
+`generated_author_info_clean` table has unique (primary_author, publication_year). This means that there will not be multiple rows (entries) that are referring to the same person within that publication year showing up more than once. Ifthe same author shows up by 2 or more different names, we merged them and used the our `duplicate_authors` data frame to create a synonym map that helps map the primary_author to their respective other names. By doing so, our `generated_author_info_clean` would need to add the counts together of those who show up in multiple rows.`generated_author_info_clean` does not contain `adjustedCount` because we simply can't add them up. It's more complicated than that so we left it out. So in total, we have 8 columns: `researcher_name, first_name, middle_name, last_name, dept, area, count, and publication_year` .
