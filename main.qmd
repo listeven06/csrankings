@@ -1148,7 +1148,7 @@ RSQLite::dbExecute(connection, query)
 row_count <- dbGetQuery(connection, "SELECT COUNT(*) AS count FROM csrankings_clean;")
 if (row_count$count == 0) {
   # Only load the data if the table is empty
-  dbWriteTable(connection, "csrankings_clean", csrankings_clean, append = TRUE, row.names = FALSE)
+  dbWriteTable(connection, "csrankings_clean", csranking_clean, append = TRUE, row.names = FALSE)
   message("Data loaded into csrankings_clean table.")
 } else {
   message("Table already contains data. Skipping data load.")
