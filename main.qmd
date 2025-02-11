@@ -789,49 +789,228 @@ dbDisconnect(connection)
 
 We implemented a very simple duplicate detection method, relying on matching four key attributes: first name, last name, scholarid, and affiliation. The idea is that if there are two or more records having the same value for these fields, they very likely refer to the same individual. The list of authors' names, with their scholarid and affiliation listed, for example, "Michael Carey" - "12345" - "XYZ University" - and other records showing the same "Michael Carey" with the exact scholarid and affiliation, get marked as a duplicate. For the identified sets of probable duplicates, we used this method to resolve them: keep just one record of each and removes the additional rows from the table csranking. This methodology cleans the dataset, providing one record per researcher with no duplication. Though it is a very simple approach, it would work if the data is very organized and if the four chosen attributes are being consistently captured. This will provide a strict and straightforward rule for duplicate detection.
 
-## Implementation
+## Cleaning Names
 
 ```{r preprocess_fix_names}
 
 connection <- dbConnect(SQLite(), "csrankings.db")
 
-query <- "
+arvind_query <- "
 UPDATE csrankings
 SET first_name = researcher_name
 WHERE researcher_name = 'Arvind';
 "
 
-test <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE researcher_name NOT LIKE '% %';")
-print(test)
+badri_query <- "
+UPDATE csrankings
+SET first_name = 'Badri', middle_name = 'N.', last_name = 'Vellambi', researcher_name = 'Badri N. Vellambi'
+WHERE homepage = 'https://researchdirectory.uc.edu/p/vellambn';
+"
+
+bharti_query <- "
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Bharti';
+"
+
+biswa_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Biswa';
+"
+
+luqi_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Luqi';
+"
+
+mausam_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Mausam';
+"
+
+ronald_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Poppe:Ronald';
+"
+
+ramyaa_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Ramyaa';
+"
+
+robby_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Robby';
+"
+
+siddharth_query <-"
+UPDATE csrankings
+SET first_name = researcher_name
+WHERE researcher_name = 'Siddharth';
+"
+
+jiaxiang_query <- "
+UPDATE csrankings
+SET first_name = 'Jiaxing', middle_name = 'Liu', last_name = '0001', researcher_name = 'Jiaxing Liu 001'
+WHERE homepage = 'https://csse.szu.edu.cn/pages/user/index?id=1031';
+"
+
+emmert_query <-"
+UPDATE csrankings
+SET first_name = 'John', middle_name = 'Marty', last_name = 'Emmert', researcher_name = 'John Marty Emmert'
+WHERE homepage = 'https://researchdirectory.uc.edu/p/emmertj';
+"
+
+kosters_query <-"
+UPDATE csrankings
+SET first_name = 'Walter', middle_name = 'A.', last_name = 'Kosters', researcher_name = 'Walter A. Kosters'
+WHERE homepage = 'https://www.universiteitleiden.nl/en/staffmembers/walter-kosters#tab-2';
+"
+
+hawkins_query <-"
+UPDATE csrankings
+SET first_name = 'William', middle_name = NULL, last_name = 'Hawkins', researcher_name = 'William Hawkins'
+WHERE homepage = 'https://researchdirectory.uc.edu/p/hawkinwh';
+"
+
+
+dbExecute(connection, arvind_query)
+dbExecute(connection, badri_query)
+dbExecute(connection, bharti_query)
+dbExecute(connection, biswa_query)
+dbExecute(connection, luqi_query)
+dbExecute(connection, mausam_query)
+dbExecute(connection, ronald_query)
+dbExecute(connection, ramyaa_query)
+dbExecute(connection, robby_query)
+dbExecute(connection, siddharth_query)
+dbExecute(connection, jiaxiang_query)
+dbExecute(connection, emmert_query)
+dbExecute(connection, kosters_query)
+dbExecute(connection, hawkins_query)
 
 ```
+
+## Implementation
+
+824 people who have no scholarid because we inserted them in from acm_fellows
+
+5342 people who have scholarid = 'NOSCHOLARPAGE'.
 
 ```{r implementing}
 
 connection <- dbConnect(SQLite(), "csrankings.db")
 
-
-dup_query <- "
-    SELECT researcher_name, first_name, middle_name, last_name, affiliation, scholarid, COUNT(*) AS duplicate_count
-    FROM csrankings
-    GROUP BY first_name, middle_name, last_name, affiliation, scholarid
-    HAVING duplicate_count > 1;
-"
-
-dup_results <- dbGetQuery(connection, "SELECT * FROM csrankings WHERE first_name IS NULL")
-cat("Duplicates detected:\n")
-print(dup_results)
-
-
 test <- "
-    SELECT researcher_name, first_name, last_name, scholarid, COUNT(*) as count
+    SELECT researcher_name, scholarid, COUNT(*) as count
     FROM csrankings
     GROUP BY scholarid
-    HAVING count > 1;
+    HAVING count > 5;
 "
 
-results <- dbGetQuery(connection, test)
-print(results)
+example <-"
+SELECT *
+FROM csrankings
+WHERE scholarid = '4yki88YAAAAJ'
+"
+
+null_values <-"
+SELECT * 
+FROM csrankings
+WHERE scholarid is NULL;
+"
+
+test_results <- dbGetQuery(connection, test)
+example_results <- dbGetQuery(connection, example)
+null_results <- dbGetQuery(connection, null_values)
+print(test_results)
+print(example_results)
+print(null_results)
 ```
 
-\
+## Task 3.3 & 3.4
+
+Determine if rows represent the same individual, then create a new table cs_ranking_clean where those individuals are merged onto a single row.
+
+Group by (first initial, last name) 1) create first_initial column 2) group_by 3) summarize function, get max string length
+
+```{r merge_duplicate_individuals}
+library(RSQLite)
+library(DBI)
+library(dplyr)
+library(stringr)
+
+connection <- RSQLite::dbConnect(SQLite(), "csrankings.db")
+
+csranking <- dbGetQuery(connection, "SELECT * FROM csrankings;")
+
+# Step 0. Clean scholarid field
+csranking_clean <- csranking %>%
+  mutate(scholarid = ifelse(scholarid == "NOSCHOLARPAGE", NA, scholarid))
+
+# Step 1. Split the data into two groups
+group_with_id <- csranking_clean %>% filter(!is.na(scholarid)) #25048
+group_without_id <- csranking_clean %>% filter(is.na(scholarid)) #6166
+
+# Step 2. Process group with scholarid
+duplicate_with_id <- group_with_id %>%
+  # Calculate the information score for each record.
+  mutate(info = nchar(first_name) +
+           if_else(is.na(middle_name), 0L, nchar(middle_name)) +
+           if_else(is.na(last_name), 0L, nchar(last_name))) %>%
+  # Group by scholarid
+  group_by(scholarid) %>%
+  # Sort descending by info score so that the record with the most information comes first
+  arrange(desc(info)) %>%
+  # Summarise by taking the first (best) record as the canonical name and 
+  # combining the other names (if any) as synonyms.
+  summarise(
+    author = first(researcher_name),
+    synonym = paste(setdiff(researcher_name, first(researcher_name)), collapse = ", "),
+    count = n()
+  ) %>%
+  ungroup() %>%
+  # Only keep groups where more than one record was found (i.e. duplicates)
+  filter(count > 1) %>%
+  select(-count)
+
+
+duplicate_without_id <- group_without_id %>%
+  # Create a simple duplicate key.
+  # If a last name exists, use the lower-case first letter of first_name plus the cleaned last_name.
+  # Otherwise, fall back to cleaning the full researcher_name.
+  mutate(
+    norm_name_key = if_else(!is.na(last_name) & last_name != "",
+                            paste0(tolower(substr(first_name, 1, 1)),
+                                   tolower(gsub("[[:punct:][:digit:]]", "", last_name))),
+                            tolower(gsub("[[:punct:][:digit:]]", "", middle_name))),
+    # Compute an "information score": total length of first, middle, and last names.
+    info = nchar(first_name) +
+           if_else(is.na(middle_name), 0L, nchar(middle_name)) +
+           if_else(is.na(last_name), 0L, nchar(last_name))
+  ) %>%
+  # Group by the duplicate key
+  group_by(norm_name_key) %>%
+  arrange(desc(info)) %>%  # the record with the most info comes first
+  summarise(
+    author = first(researcher_name),
+    synonym = paste(setdiff(researcher_name, first(researcher_name)), collapse = ", "),
+    count = n()
+  ) %>%
+  ungroup() %>%
+  # Only keep groups where duplicates were detected (more than one record)
+  filter(count > 1) %>%
+  select(-count)
+
+# Step 4. Combine the duplicate groups from both sets
+duplicate_authors <- bind_rows(duplicate_with_id, duplicate_without_id)
+
+print(duplicate_authors)
+
+```
