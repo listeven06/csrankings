@@ -1197,6 +1197,66 @@ RSQLite::dbDisconnect(connection)
 
 ```
 
-`generated_author_info_clean` table has unique (primary_author, publication_year). This means that there will not be multiple rows (entries) that are referring to the same person within that publication year showing up more than once. Ifthe same author shows up by 2 or more different names, we merged them and used the our `duplicate_authors` data frame to create a synonym map that helps map the primary_author to their respective other names. By doing so, our `generated_author_info_clean` would need to add the counts together of those who show up in multiple rows.`generated_author_info_clean` does not contain `adjustedCount` because we simply can't add them up. It's more complicated than that so we left it out. So in total, we have 8 columns: `researcher_name, first_name, middle_name, last_name, dept, area, count, and publication_year` .
+`generated_author_info_clean` table has unique (primary_author, publication_year). This means that there will not be multiple rows (entries) that are referring to the same person within that publication year showing up more than once. If the same author shows up by 2 or more different names, we merged them and used the our `duplicate_authors` data frame to create a synonym map that helps map the primary_author to their respective other names. By doing so, our `generated_author_info_clean` would need to add the counts together of those who show up in multiple rows.`generated_author_info_clean` does not contain `adjustedCount` because we simply can't add them up. It's more complicated than that so we left it out. So in total, we have 8 columns: `researcher_name, first_name, middle_name, last_name, dept, area, count, and publication_year` .
 
 # Task 4.1
+
+```{r}
+connection = dbConnect(SQLite(), 'csrankings.db')
+
+update_cap <-"
+UPDATE generated_author_info_clean
+SET area = UPPER(area);
+"
+
+dbExecute(connection, update_cap)
+generated_author_info_clean <- dbGetQuery(connection, 'SELECT * FROM generated_author_info_clean;')
+
+query <-"
+SELECT gai.researcher_name AS 'Author Name', gai.dept AS 'Institution', SUM(gai.count) AS 'A* Publication Count'
+FROM generated_author_info_clean AS gai
+JOIN conference_ranking AS cr
+ON gai.area = cr.acronym
+JOIN field_conference AS fc
+ON cr.acronym = fc.conference_name
+WHERE cr.rank = 'A*' AND gai.publication_year BETWEEN 2010 AND 2024
+GROUP BY gai.researcher_name, gai.dept
+ORDER BY SUM(gai.count) DESC, 
+         gai.researcher_name ASC, 
+         gai.dept ASC
+LIMIT 100;
+"
+
+result <- dbGetQuery(connection, query)
+print(result)
+```
+
+# Task 4.2
+
+```{r}
+
+query <-"
+WITH InstitutionCounts AS (
+  SELECT fc.specialized_field AS cs_field, gai.dept AS institution, SUM(gai.count) AS asterisk_count
+  FROM generated_author_info_clean AS gai
+  JOIN conference_ranking AS cr 
+  ON gai.area = cr.acronym
+  JOIN field_conference AS fc 
+  ON gai.area = fc.conference_name
+  WHERE cr.rank = 'A*'
+  GROUP BY fc.specialized_field, gai.dept
+),
+RankedInstitutions AS (
+  SELECT cs_field, institution, asterisk_count, RANK() OVER (PARTITION BY cs_field ORDER BY asterisk_count DESC) AS rnk
+  FROM InstitutionCounts
+)
+SELECT 
+  cs_field AS 'CS Field', institution AS'Institution Name', asterisk_count AS 'A* Publication Count'
+FROM RankedInstitutions
+WHERE rnk <= 10
+ORDER BY cs_field ASC, asterisk_count DESC, institution ASC;
+"
+  
+result <- dbGetQuery(connection, query)
+print(result)
+```
