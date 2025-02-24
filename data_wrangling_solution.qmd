@@ -1,0 +1,261 @@
+---
+title: "Data Wrangling"
+format: html
+editor: visual
+---
+
+### Read Data
+
+```{r read_data}
+library(readr)
+
+csrankings <- read_csv("datasets/csrankings.csv")
+generated_author_info <- read_csv("datasets/generated-author-info.csv")
+acm_fellows <- read_csv("datasets/acm-fellows.csv")
+turing <- read.csv("datasets/turing.csv")
+geolocation <- read.csv("datasets/geolocation.csv")
+country_info <- read.csv("datasets/country-info.csv")
+dblp_aliases <- read.csv("datasets/dblp-aliases.csv")
+conference_ranking <- read.csv("datasets/conference_ranking.csv")
+data <- read.csv("datasets/data.csv")
+field_conference <- read.csv("datasets/field_conference.csv")
+
+head(csrankings)
+head(generated_author_info)
+head(acm_fellows)
+head(turing)
+head(geolocation)
+head(country_info)
+head(dblp_aliases)
+head(conference_ranking)
+head(data)
+head(field_conference)
+```
+
+### Data Loading
+
+```{r load_conference_ranking}
+library(sqldf)
+
+#overwrite the conference_ranking table with the new column
+
+conference_ranking <- sqldf("select *,
+                            case when upper(Name) like '%ACM%' and upper(Name) like '%IEEE%' then 'ACM+IEEE' when upper(Name) like '%ACM%' then 'ACM' when upper(Name) like '%IEEE%' then 'IEEE' else 'other' end as academic_society from conference_ranking")
+```
+
+```{r}
+sqldf("select academic_society, count(*) cnt from conference_ranking group by academic_society order by cnt desc")
+```
+
+```{r}
+sqldf("select Name from conference_ranking
+      where academic_society = 'ACM'
+      limit 10")
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+#split_names is a function that will split a name field into first, middle, last 
+#there may also be numbers or other stuff at the end, these go in a field called "extra" 
+split_names <- function(x){  #one name has this weird character in it that needs to be replaced with a space  
+  x <- gsub("\U00A0", " ", x) 
+  temp <- strsplit(x, " ")[[1]]  #ignore any word that contains "0" or "[" or "Jr."  
+  filter <- !str_detect(temp, pattern='0|\\[|Jr.')
+  extra <- temp[!filter] %>% paste(collapse = " ")
+  n <- length(temp[filter]) 
+  first <- temp[1]  #sometimes there is a middle name or initial; identify when and store it  
+  middle <- ifelse(n < 3, "", paste(temp[2:(n-1)], collapse = " ") )
+  last <- temp[n]
+  c(first, middle, last, extra) }
+
+temp <- lapply(csrankings$name, function(x){
+  split_names(x) }) %>% 
+  unlist() %>% 
+  matrix(ncol = 4, byrow = TRUE) %>% 
+  data.frame()
+
+colnames(temp) <- c("First","Middle","Last","Extra")
+
+csrankings <- cbind(csrankings, temp)
+head(csrankings)
+```
+
+```{r}
+missing_names <- sqldf("select distinct a.name, dept as affiliation
+                       from generated_author_info a
+                       left join (select distinct name, 1 as in_csrankings from csrankings) b on (a.name == b.name)
+                       where in_csrankings is null")
+head(missing_names)
+```
+
+```{r}
+temp <- lapply(missing_names$name, function(x){ split_names(x) }) %>% 
+  unlist() %>% 
+  matrix(ncol = 4, byrow = TRUE) %>% 
+  data.frame()
+
+colnames(temp) <- c("First","Middle","Last","Extra")
+missing_names <- cbind(missing_names, temp) 
+csrankings <- plyr::rbind.fill(csrankings, missing_names)
+```
+
+```{r}
+#first get all the distinct names in acm_fellows
+temp <- sqldf("select distinct name from acm_fellows") %>% 
+  unlist() %>% 
+  lapply(., function(x){ c(x, split_names(x)) }) %>% 
+  unlist() %>% 
+  matrix(ncol = 5, byrow = TRUE) %>% 
+  data.frame() 
+
+colnames(temp) <- c("name","First","Middle","Last","Extra") 
+missing_names <- sqldf("select name, a.First, a.Middle, a.Last from temp a left join (select distinct First, Last, 1 as in_csrankings from csrankings) b on (a.First = b.First and a.Last = b.Last) where in_csrankings is null") 
+head(missing_names)
+```
+```{r}
+#this command appends the rows from "missing_names" onto the bottom of "csrankings" 
+csrankings <- plyr::rbind.fill(csrankings, missing_names)
+tail(csrankings)
+```
+
+```{r}
+#first get all the distinct names in turing 
+temp <- sqldf("select distinct name from turing") %>%
+  unlist() %>%
+  lapply(., function(x){    c(x, split_names(x))  }) %>%
+  unlist() %>% 
+  matrix(ncol = 5, byrow = TRUE) %>%  
+  data.frame() 
+
+colnames(temp) <- c("name","First","Middle","Last","Extra")
+
+missing_names <- sqldf("select name, a.First, a.Middle, a.Last from temp a
+  left join (select distinct First, Last, 1 as in_csrankings from csrankings) b
+  on (a.First = b.First and a.Last = b.Last)
+  where in_csrankings is null")
+
+head(missing_names)
+```
+```{r}
+csrankings <- plyr::rbind.fill(csrankings, missing_names)
+tail(csrankings)
+```
+
+```{r}
+sqldf("select * from csrankings a 
+  left join (select distinct scholarid, Last from csrankings) b 
+  on (a.scholarid = b.scholarid)
+  where a.Last != b.Last
+  order by scholarid
+  limit 10")
+```
+
+```{r}
+sqldf("select a.name, b.name, a.homepage, b.homepage from csrankings a
+      left join (select name, homepage, scholarid from csrankings) b
+      on (a.homepage == b.homepage)
+      where a.scholarid != b.scholarid
+      order by a.homepage
+      limit 10")
+```
+
+```{r}
+resolved <- sqldf("select distinct name, scholarid,
+                  first_value(First) over
+                    (partition by scholarid order by length(First) desc) as First,
+                  first_value(Last) over
+                    (partition by scholarid order by length(Last) desc) as Last
+                  from csrankings
+                  where scholarid != 'NOSCHOLARPAGE' and scholarid != 'NA'")
+
+head(resolved)
+```
+
+```{r}
+to_resolve <- sqldf("select a.name, First, Last, affiliation from csrankings a
+                    left join (select name, 1 as in_resolved from resolved) b
+                    on (a.name == b.name)
+                    where in_resolved is null")
+
+temp <- sqldf("select distinct name,
+              first_value(First) over (partition by Last, substring(First, 1, 1), affiliation         order by length(First) desc) as First,
+              first_value(Last) over (partition by Last, substring(First, 1, 1), affiliation
+              order by length(Last) desc) as Last,
+              affiliation
+              from csrankings
+              where affiliation is not null")
+
+temp <- sqldf("select distinct a.name, First, Last from temp a
+              left join (select distinct name, 1 as in_to_resolve from to_resolve) b
+              on (a.name = b.name)
+              where in_to_resolve is not null")
+
+resolved <- plyr::rbind.fill(resolved, temp)
+
+to_resolve <- sqldf("select a.name, First, Last, affiliation from csrankings a
+                    left join (select name, 1 as in_resolved from resolved) b
+                    on (a.name == b.name)
+                    where in_resolved is null")
+nrow(to_resolve)
+```
+
+```{r}
+temp <- sqldf("select name,
+              first_value(First) over (partition by Last, substring(First, 1, 1)
+                order by length(First) desc) as First,
+              first_value(Last) over (partition by Last, substring(First, 1, 1)
+                order by length(Last) desc) as Last from csrankings")
+
+temp <- sqldf("select distinct a.name, First, Last from temp a
+              left join (select name, 1 as in_to_resolve from to_resolve) b
+              on (a.name == b.name) where in_to_resolve == 1 order by Last")
+
+resolved <- plyr::rbind.fill(resolved, temp)
+```
+
+```{r}
+sqldf("select count(*) from resolved where First is null or Last is null")
+```
+
+```{r}
+sqldf("select distinct a.name from csrankings a
+        left join (select distinct name, 1 as in_resolved from resolved) b
+        on (a.name = b.name) where in_resolved is null")
+```
+
+```{r}
+duplicate_author <- sqldf("select distinct name as author, concat(First, ' ', Last) as synonym
+                          from resolved order by synonym")
+
+sqldf("select a.author, a.synonym from duplicate_author a
+      left join (select synonym, count(*) as cnt from duplicate_author group by synonym)
+      b on (a.synonym = b.synonym)
+      where cnt > 1 limit 20")
+```
+
+```{r}
+temp <- sqldf("select name, coalesce(affiliation,'NA') as affiliation,
+              coalesce(homepage,'NA') as homepage,
+              coalesce(scholarid,'NA') as scholarid from csrankings")
+
+csrankings_clean <- sqldf("select distinct b.synonym as name, 
+                          first_value(affiliation) over (partition by b.synonym
+                            order by length(affiliation) desc) as affiliation,
+                          first_value(homepage) over (partition by b.synonym 
+                            order by length(homepage) desc) as homepage,
+                          first_value(scholarid) over (partition by b.synonym
+                            order by length(scholarid) desc) as scholarid
+                          from temp a
+                          left join duplicate_author b on (a.name = b.author)")
+```
+
+```{r}
+generated_author_info_clean <- sqldf("select synonym as name, dept, area, sum(count) as count, sum(adjustedcount) as adjusted_count, year from generated_author_info a
+                                    left join duplicate_author b on (a.name = b.author)
+                                    group by name, dept, area, year")
+
+head(generated_author_info_clean)
+```
+
