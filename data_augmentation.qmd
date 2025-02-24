@@ -1,0 +1,48 @@
+---
+title: Data Augmentation"
+format: html
+editor: visual
+---
+
+### Read Data
+
+```{r read_data}
+library(readr)
+
+nih_awd_df <- readr::read_csv("NIH_Award\\RePORTER_PRJ_C_FY2024.csv")
+nsf_awd_df <- readr::read_csv("nsf_award.csv")
+
+head(nih_awd_df)
+head(nsf_awd_df)
+```
+Feature engineer nih_awd_df.
+Variables of interest: PI_IDS, PI_NAME, ORG_NAME
+
+Check if the same award can be assigned to multiple organizations.
+
+```{r nih_data_exploration1}
+library(dplyr)
+
+# Check if the same award can be assigned to multiple organizations
+nih_awd_df %>%
+  select(PI_IDS, PI_NAMEs, ORG_NAME) %>% 
+  mutate(ORG_NAME = strsplit(ORG_NAME, ";"),
+         org_name_count = sapply(ORG_NAME, length)) %>% 
+  filter(org_name_count > 1)
+```
+
+
+```{r nih_feature_engineering}
+library(dplyr)
+library(tidyr)
+
+nih_awd_df %>%
+  select(PI_IDS, PI_NAMEs, ORG_NAME) %>% 
+  mutate(PI_IDS = strsplit(PI_IDS, ";"),
+         PI_NAMEs = strsplit(PI_NAMEs, ";")) %>% 
+  unnest(c(PI_IDS, PI_NAMEs, ORG_NAME))
+```
+
+Luckily for nsf_awd_df, data is already unnested.
+
+
