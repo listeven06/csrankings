@@ -259,3 +259,17 @@ generated_author_info_clean <- sqldf("select synonym as name, dept, area, sum(co
 head(generated_author_info_clean)
 ```
 
+```{r}
+head(generated_author_info_clean)
+head(csrankings_clean)
+```
+
+### Write Data
+
+```{r}
+library(readr)
+
+write_csv(csrankings_clean, "csrankings_clean.csv")
+write_csv(generated_author_info_clean, "generated_author_info_clean.csv")
+```
+
