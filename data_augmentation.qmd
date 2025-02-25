@@ -15,8 +15,8 @@ nsf_awd_df <- readr::read_csv("nsf_award.csv")
 head(nih_awd_df)
 head(nsf_awd_df)
 ```
-Feature engineer nih_awd_df.
-Variables of interest: PI_IDS, PI_NAME, ORG_NAME
+
+Feature engineer nih_awd_df. Variables of interest: PI_IDS, PI_NAME, ORG_NAME
 
 Check if the same award can be assigned to multiple organizations.
 
@@ -31,18 +31,171 @@ nih_awd_df %>%
   filter(org_name_count > 1)
 ```
 
-
 ```{r nih_feature_engineering}
 library(dplyr)
 library(tidyr)
 
-nih_awd_df %>%
+nih_awd_df <- nih_awd_df %>%
   select(PI_IDS, PI_NAMEs, ORG_NAME) %>% 
   mutate(PI_IDS = strsplit(PI_IDS, ";"),
          PI_NAMEs = strsplit(PI_NAMEs, ";")) %>% 
   unnest(c(PI_IDS, PI_NAMEs, ORG_NAME))
+
+head(nih_awd_df)
 ```
 
 Luckily for nsf_awd_df, data is already unnested.
+
+
+### Data Transformation
+
+Remove "(contact)", "(nickname)", "-", and extra whitespace at the end of PI_IDS and PI_NAMEs
+```{r}
+# Remove parentheses, quotes, hyphens, and extra whitespace
+nih_awd_df$PI_NAMEs <- gsub("\\(.*?\\)|[\"']|-", "", nih_awd_df$PI_NAMEs)  # Remove (), quotes, and -
+nih_awd_df$PI_NAMEs <- gsub("\\s+", " ", nih_awd_df$PI_NAMEs)  # Replace multiple spaces with a single space
+nih_awd_df$PI_NAMEs <- trimws(nih_awd_df$PI_NAMEs)  # Trim leading/trailing whitespace
+
+nih_awd_df$PI_IDS <- gsub("\\(.*?\\)|[\"']|-", "", nih_awd_df$PI_IDS)  # Remove (), quotes, and -
+nih_awd_df$PI_IDS <- gsub("\\s+", " ", nih_awd_df$PI_IDS)  # Replace multiple spaces with a single space
+nih_awd_df$PI_IDS <- trimws(nih_awd_df$PI_IDS)  # Trim leading/trailing whitespace
+
+# View the transformed dataset
+head(nih_awd_df)
+```
+
+
+```{r}
+# Function to clean and split names
+clean_names <- function(name) {
+  # Split into parts based on comma and space
+  parts <- strsplit(name, ",\\s*")[[1]]
+  
+  # If there's no comma, assume the entire name is the last name
+  if (length(parts) < 2) {
+    last <- parts[1]
+    first <- ""
+    middle <- ""
+  } else {
+    last <- parts[1]
+    first_middle <- strsplit(parts[2], "\\s+")[[1]]
+    first <- first_middle[1]
+    middle <- if (length(first_middle) > 1) {
+      paste(first_middle[2:length(first_middle)], collapse = " ")
+    } else {
+      ""
+    }
+  }
+  
+  # Return as a data frame row
+  data.frame(First = first, Middle = middle, Last = last, stringsAsFactors = FALSE)
+}
+
+# Apply the function to each name
+name_data <- lapply(nih_awd_df$PI_NAMEs, clean_names) %>%
+  bind_rows()
+
+# Combine with the original data
+nih_awd_df <- cbind(name_data, nih_awd_df)
+
+head(nih_awd_df)
+
+# TODO Resolve duplicates by selecting the first and last name pair, duplicates should be possible though
+
+# Add a new column for full name using base R
+nih_awd_df$FullName <- trimws(paste(nih_awd_df$First, nih_awd_df$Last))
+
+head(nih_awd_df)
+```
+
+### Data Augmentation
+
+Join nih_awd_df and generated_author_info by name
+
+```{r read_data2}
+library(readr)
+
+generated_author_info_clean <- read_csv("generated_author_info_clean.csv")
+csrankings_clean <- read_csv("csrankings_clean.csv")
+
+tail(generated_author_info_clean)
+tail(csrankings_clean)
+```
+
+Fix nih_awd_df such that name is in title format
+
+```{r}
+library(dplyr)
+library(stringr)
+
+nih_awd_df_clean <- nih_awd_df %>% 
+  mutate(name = stringr::str_to_title(FullName)) %>% 
+  rename(pi_id = PI_IDS,
+         organization = ORG_NAME) %>% 
+  select(pi_id, name, organization)
+```
+
+Name is now consistent among both datasets
+
+TODO: group by name and get count of observations as num of NIH Awards
+
+```{r}
+num_awards <- nih_awd_df_clean %>% 
+  group_by(name, pi_id) %>% 
+  summarize(num_of_nih_awds = n())
+
+head(num_awards)
+```
+
+Left join num_awds with generated_author_info (such that it joins with number of awards and NA if there is no award)
+
+```{r}
+library(dplyr)
+
+generated_author_info_clean %>% 
+  left_join(num_awards) %>% 
+  filter(!is.na(num_of_nih_awds))
+```
+
+Aggregate generated_author_info to sum the number of publications and adjusted count, so each person has 1 observation
+
+```{r}
+library(dplyr)
+
+generated_author_info_aggregated <- generated_author_info_clean %>% 
+  group_by(name) %>% 
+  summarize(
+    dept = first(dept),
+    total_publications = sum(count),
+    adjusted_total_publications = sum(adjusted_count)
+  )
+```
+
+Left join this new aggregated dataset with num_awards
+
+```{r}
+library(dplyr)
+
+author_nih_award_info <- generated_author_info_aggregated %>% 
+  left_join(num_awards, by="name") %>% 
+  mutate(num_nih_awds = if_else(is.na(num_of_nih_awds), 0, num_of_nih_awds)) %>% 
+  select(-num_of_nih_awds)
+
+head(author_nih_award_info)
+```
+
+TODO: Join with csrankings
+
+
+### Preliminary models
+
+```{r}
+mod1 <- lm(num_nih_awds ~ adjusted_total_publications, data=author_nih_award_info)
+
+summary(mod1)
+```
+
+The number of nih_awards is positively associated with adjusted total publications
+
 
 
