@@ -46,10 +46,10 @@ head(nih_awd_df)
 
 Luckily for nsf_awd_df, data is already unnested.
 
-
 ### Data Transformation
 
 Remove "(contact)", "(nickname)", "-", and extra whitespace at the end of PI_IDS and PI_NAMEs
+
 ```{r}
 # Remove parentheses, quotes, hyphens, and extra whitespace
 nih_awd_df$PI_NAMEs <- gsub("\\(.*?\\)|[\"']|-", "", nih_awd_df$PI_NAMEs)  # Remove (), quotes, and -
@@ -63,7 +63,6 @@ nih_awd_df$PI_IDS <- trimws(nih_awd_df$PI_IDS)  # Trim leading/trailing whitespa
 # View the transformed dataset
 head(nih_awd_df)
 ```
-
 
 ```{r}
 # Function to clean and split names
@@ -108,7 +107,42 @@ nih_awd_df$FullName <- trimws(paste(nih_awd_df$First, nih_awd_df$Last))
 head(nih_awd_df)
 ```
 
-### Data Augmentation
+### NSF Award
+
+For nsf_awd_df, make naming scheme consistent with A1, and nih_awd_df.
+
+```{r}
+library(dplyr)
+
+clean_names2 <- function(name) {
+  parts <- strsplit(name, " ")[[1]]
+  first = parts[1]
+  last = parts[length(parts)]
+  
+  # Return as a data frame row
+  data.frame(First = first, Last = last, stringsAsFactors = FALSE)
+}
+
+# Apply the function to each name
+name_data <- lapply(nsf_awd_df$pi_full_name, clean_names2) %>%
+  bind_rows()
+
+# Combine with the original data
+nsf_awd_df <- cbind(name_data, nsf_awd_df)
+
+head(nsf_awd_df)
+
+# TODO Resolve duplicates by selecting the first and last name pair, duplicates should be possible though
+
+# Add a new column for full name using base R
+nsf_awd_df$FullName <- trimws(paste(nsf_awd_df$First, nsf_awd_df$Last))
+
+head(nsf_awd_df)
+```
+
+## Data Augmentation
+
+### nih_awd_df
 
 Join nih_awd_df and generated_author_info by name
 
@@ -184,18 +218,52 @@ author_nih_award_info <- generated_author_info_aggregated %>%
 head(author_nih_award_info)
 ```
 
-TODO: Join with csrankings
+### nsf_awd_df
 
+Streamline columns
+
+```{r}
+library(dplyr)
+library(stringr)
+
+nsf_awd_df_clean <- nsf_awd_df %>% 
+  rename(name = FullName) %>% 
+  mutate(name = str_to_title(name)) %>% 
+  select(pi_id, name, perf_inst_name)
+
+head(nsf_awd_df_clean)
+```
+
+Aggregate by name
+
+```{r}
+nsf_award_names <- nsf_awd_df_clean %>% 
+  group_by(name) %>% 
+  summarise(
+    num_nsf_awds = n()
+  )
+
+head(nsf_award_names)
+```
+
+```{r}
+library(dplyr)
+
+author_award_info <- author_nih_award_info %>% 
+  left_join(nsf_award_names, by="name") %>% 
+  mutate(num_nsf_awds = if_else(is.na(num_nsf_awds), 0, num_nsf_awds),
+         total_grant_awards = num_nih_awds + num_nsf_awds) %>% 
+  arrange(desc(total_grant_awards))
+
+head(author_award)
+```
 
 ### Preliminary models
 
 ```{r}
-mod1 <- lm(num_nih_awds ~ adjusted_total_publications, data=author_nih_award_info)
+mod1 <- lm(total_grant_awards ~ adjusted_total_publications + dept*adjusted_total_publications, data=author_award_info)
 
 summary(mod1)
 ```
 
 The number of nih_awards is positively associated with adjusted total publications
-
-
-
