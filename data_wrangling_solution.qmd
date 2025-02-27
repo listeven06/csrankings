@@ -52,6 +52,7 @@ sqldf("select Name from conference_ranking
       where academic_society = 'ACM'
       limit 10")
 ```
+
 ```{r}
 library(dplyr)
 library(tidyr)
@@ -114,6 +115,7 @@ colnames(temp) <- c("name","First","Middle","Last","Extra")
 missing_names <- sqldf("select name, a.First, a.Middle, a.Last from temp a left join (select distinct First, Last, 1 as in_csrankings from csrankings) b on (a.First = b.First and a.Last = b.Last) where in_csrankings is null") 
 head(missing_names)
 ```
+
 ```{r}
 #this command appends the rows from "missing_names" onto the bottom of "csrankings" 
 csrankings <- plyr::rbind.fill(csrankings, missing_names)
@@ -138,6 +140,7 @@ missing_names <- sqldf("select name, a.First, a.Middle, a.Last from temp a
 
 head(missing_names)
 ```
+
 ```{r}
 csrankings <- plyr::rbind.fill(csrankings, missing_names)
 tail(csrankings)
@@ -272,4 +275,3 @@ library(readr)
 write_csv(csrankings_clean, "csrankings_clean.csv")
 write_csv(generated_author_info_clean, "generated_author_info_clean.csv")
 ```
-

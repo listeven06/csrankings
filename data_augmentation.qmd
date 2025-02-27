@@ -10,7 +10,7 @@ editor: visual
 library(readr)
 
 nih_awd_df <- readr::read_csv("NIH_Award\\RePORTER_PRJ_C_FY2024.csv")
-nsf_awd_df <- readr::read_csv("nsf_award.csv")
+nsf_awd_df <- readr::read_csv("nsf_awd_df2.csv")
 
 head(nih_awd_df)
 head(nsf_awd_df)
@@ -228,8 +228,7 @@ library(stringr)
 
 nsf_awd_df_clean <- nsf_awd_df %>% 
   rename(name = FullName) %>% 
-  mutate(name = str_to_title(name)) %>% 
-  select(pi_id, name, perf_inst_name)
+  mutate(name = str_to_title(name))
 
 head(nsf_awd_df_clean)
 ```
@@ -255,13 +254,13 @@ author_award_info <- author_nih_award_info %>%
          total_grant_awards = num_nih_awds + num_nsf_awds) %>% 
   arrange(desc(total_grant_awards))
 
-head(author_award)
+head(author_award_info)
 ```
 
 ### Preliminary models
 
 ```{r}
-mod1 <- lm(total_grant_awards ~ adjusted_total_publications + dept*adjusted_total_publications, data=author_award_info)
+mod1 <- lm(total_grant_awards ~ adjusted_total_publications, data = author_award_info)
 
 summary(mod1)
 ```
