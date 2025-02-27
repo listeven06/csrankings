@@ -9,6 +9,7 @@ editor: visual
 ```{r read_data}
 library(readr)
 
+# Import augmented datasets
 nih_awd_df <- readr::read_csv("NIH_Award\\RePORTER_PRJ_C_FY2024.csv")
 nsf_awd_df <- readr::read_csv("nsf_awd_df2.csv")
 
@@ -16,20 +17,30 @@ head(nih_awd_df)
 head(nsf_awd_df)
 ```
 
-Feature engineer nih_awd_df. Variables of interest: PI_IDS, PI_NAME, ORG_NAME
+## Data Exploration
+
+### NIH Award
 
 Check if the same award can be assigned to multiple organizations.
 
 ```{r nih_data_exploration1}
 library(dplyr)
 
-# Check if the same award can be assigned to multiple organizations
 nih_awd_df %>%
   select(PI_IDS, PI_NAMEs, ORG_NAME) %>% 
   mutate(ORG_NAME = strsplit(ORG_NAME, ";"),
          org_name_count = sapply(ORG_NAME, length)) %>% 
   filter(org_name_count > 1)
 ```
+
+### NSF Award
+
+
+## Data Cleaning
+
+### NIH Award
+
+Select key features, and unnest PI_NAME, PI_IDs (Awards can have multiple PIs)
 
 ```{r nih_feature_engineering}
 library(dplyr)
@@ -44,11 +55,9 @@ nih_awd_df <- nih_awd_df %>%
 head(nih_awd_df)
 ```
 
-Luckily for nsf_awd_df, data is already unnested.
+Clean name format to be consistent with Assignment 1.
 
-### Data Transformation
-
-Remove "(contact)", "(nickname)", "-", and extra whitespace at the end of PI_IDS and PI_NAMEs
+Remove "(contact)", "(nickname)", "-", and extra whitespace at the end of PI_IDS and PI_NAMEs.
 
 ```{r}
 # Remove parentheses, quotes, hyphens, and extra whitespace
@@ -107,9 +116,24 @@ nih_awd_df$FullName <- trimws(paste(nih_awd_df$First, nih_awd_df$Last))
 head(nih_awd_df)
 ```
 
+Fix nih_awd_df such that name is in title format
+
+```{r}
+library(dplyr)
+library(stringr)
+
+nih_awd_df_clean <- nih_awd_df %>% 
+  mutate(name = stringr::str_to_title(FullName)) %>% 
+  rename(pi_id = PI_IDS,
+         organization = ORG_NAME) %>% 
+  select(pi_id, name, organization)
+```
+
 ### NSF Award
 
-For nsf_awd_df, make naming scheme consistent with A1, and nih_awd_df.
+Luckily for NSF, data is already unnested.
+
+Make name format consistent with A1, an NIH Award.
 
 ```{r}
 library(dplyr)
@@ -140,86 +164,6 @@ nsf_awd_df$FullName <- trimws(paste(nsf_awd_df$First, nsf_awd_df$Last))
 head(nsf_awd_df)
 ```
 
-## Data Augmentation
-
-### nih_awd_df
-
-Join nih_awd_df and generated_author_info by name
-
-```{r read_data2}
-library(readr)
-
-generated_author_info_clean <- read_csv("generated_author_info_clean.csv")
-csrankings_clean <- read_csv("csrankings_clean.csv")
-
-tail(generated_author_info_clean)
-tail(csrankings_clean)
-```
-
-Fix nih_awd_df such that name is in title format
-
-```{r}
-library(dplyr)
-library(stringr)
-
-nih_awd_df_clean <- nih_awd_df %>% 
-  mutate(name = stringr::str_to_title(FullName)) %>% 
-  rename(pi_id = PI_IDS,
-         organization = ORG_NAME) %>% 
-  select(pi_id, name, organization)
-```
-
-Name is now consistent among both datasets
-
-TODO: group by name and get count of observations as num of NIH Awards
-
-```{r}
-num_awards <- nih_awd_df_clean %>% 
-  group_by(name, pi_id) %>% 
-  summarize(num_of_nih_awds = n())
-
-head(num_awards)
-```
-
-Left join num_awds with generated_author_info (such that it joins with number of awards and NA if there is no award)
-
-```{r}
-library(dplyr)
-
-generated_author_info_clean %>% 
-  left_join(num_awards) %>% 
-  filter(!is.na(num_of_nih_awds))
-```
-
-Aggregate generated_author_info to sum the number of publications and adjusted count, so each person has 1 observation
-
-```{r}
-library(dplyr)
-
-generated_author_info_aggregated <- generated_author_info_clean %>% 
-  group_by(name) %>% 
-  summarize(
-    dept = first(dept),
-    total_publications = sum(count),
-    adjusted_total_publications = sum(adjusted_count)
-  )
-```
-
-Left join this new aggregated dataset with num_awards
-
-```{r}
-library(dplyr)
-
-author_nih_award_info <- generated_author_info_aggregated %>% 
-  left_join(num_awards, by="name") %>% 
-  mutate(num_nih_awds = if_else(is.na(num_of_nih_awds), 0, num_of_nih_awds)) %>% 
-  select(-num_of_nih_awds)
-
-head(author_nih_award_info)
-```
-
-### nsf_awd_df
-
 Streamline columns
 
 ```{r}
@@ -245,6 +189,191 @@ nsf_award_names <- nsf_awd_df_clean %>%
 head(nsf_award_names)
 ```
 
+
+### Data Visualization
+
+```{r data_visualization}
+# View datasets
+
+head(nih_awd_df)
+head(nsf_awd_df)
+```
+Visual 1: Bar chart of the top 6 organizations with the most NIH projects
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+nih_awd_org <- nih_awd_df %>% 
+  group_by(ORG_NAME) %>% 
+  summarise(
+    num_awards = n()
+  ) %>% 
+  arrange(desc(num_awards)) %>% 
+  slice(1:6)
+
+# Create the bar plot
+ggplot(nih_awd_org, aes(x = ORG_NAME, y = num_awards, fill = ORG_NAME)) +
+  geom_bar(stat = "identity") +  # Use stat = "identity" for bar heights based on y values
+  labs(
+    title = "Number of NIH Awards by Organization",
+    x = "Organization Name",
+    y = "Number of Awards"
+  ) +
+  theme_minimal() +  # Use a minimal theme for a clean look
+  theme(
+    axis.text.x = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold")  # Center and style the title
+  ) +
+  scale_fill_viridis_d()  # Use a color scale for the bars (optional)
+```
+
+Visual 2: Bar chart of top 6 organizations with the most NSF projects
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+nsf_awd_org <- nsf_awd_df %>% 
+  group_by(org_name) %>% 
+  summarise(
+    num_awards = n()
+  ) %>% 
+  arrange(desc(num_awards)) %>% 
+  slice(1:6)
+
+# Create the bar plot
+ggplot(nsf_awd_org, aes(x = org_name, y = num_awards, fill = org_name)) +
+  geom_bar(stat = "identity") +  # Use stat = "identity" for bar heights based on y values
+  labs(
+    title = "Number of NSF Awards by Organization",
+    x = "Organization Name",
+    y = "Number of Awards"
+  ) +
+  theme_minimal() +  # Use a minimal theme for a clean look
+  theme(
+    axis.text.x = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold")  # Center and style the title
+  ) +
+  scale_fill_viridis_d()  # Use a color scale for the bars (optional)
+```
+
+
+## Data Augmentation
+
+
+```{r read_data2}
+library(readr)
+
+generated_author_info_clean <- read_csv("generated_author_info_clean.csv")
+csrankings_clean <- read_csv("csrankings_clean.csv")
+field_conference <- read_csv("datasets\\field_conference.csv")
+conference_ranking <- read_csv("datasets\\conference_ranking.csv")
+
+tail(generated_author_info_clean)
+tail(csrankings_clean)
+head(field_conference)
+head(conference_ranking)
+```
+Join field conference and conference_ranking.
+
+```{r}
+library(dplyr)
+library(stringr)
+
+new_generated_author_info <- generated_author_info_clean %>% 
+  mutate(conference = str_to_upper(area)) %>% 
+  inner_join(conference_ranking %>% rename(conference = Antonym)) %>% 
+  inner_join(field_conference) %>% 
+  select(-area)
+
+head(new_generated_author_info)
+```
+
+Okay, now do aggregations.
+
+### Analysis
+
+Explore trends and patterns in publication counts based on NIH/NSF funding
+
+```{r join_nsf_nih}
+aggregated_nih_df <- nih_awd_df_clean %>% 
+  group_by(name) %>% 
+  summarise(
+    total_nih_awards = n()
+  )
+
+aggregated_nsf_df <- nsf_awd_df_clean %>% 
+  group_by(name) %>% 
+  summarise(
+    total_nsf_awards = n()
+  )
+
+author_award_info <- new_generated_author_info %>% 
+  left_join(aggregated_nih_df, by='name') %>% 
+  left_join(aggregated_nsf_df, by='name') %>% 
+  mutate(total_nih_awards = if_else(is.na(total_nih_awards), 0, total_nih_awards),
+         total_nsf_awards = if_else(is.na(total_nsf_awards), 0, total_nsf_awards),
+         total_awards = total_nih_awards + total_nsf_awards)
+head(author_award_info)
+```
+
+```{r}
+temp <- author_award_info %>% 
+  group_by(conference) %>% 
+  summarise(
+    total_publications = sum(count),
+    total_adjusted_publications = sum(adjusted_count),
+    Rank = first(Rank),
+    field = first(field),
+    nih_awards = sum(total_nih_awards),
+    nsf_awards = sum(total_nsf_awards),
+    total_awards = sum(total_awards)
+  )
+
+mod10 <- lm(total_publications ~ nsf_awards*field + nih_awards*field, data=temp)
+summary(mod10)
+```
+
+
+
+
+
+
+
+Name is now consistent among both datasets.
+
+```{r}
+num_awards <- nih_awd_df_clean %>% 
+  group_by(name, pi_id) %>% 
+  summarize(num_of_nih_awds = n())
+
+head(num_awards)
+```
+
+Left join num_awds with generated_author_info (such that it joins with number of awards and NA if there is no award)
+
+```{r}
+library(dplyr)
+
+generated_author_info_clean %>% 
+  left_join(num_awards) %>% 
+  filter(!is.na(num_of_nih_awds))
+```
+
+Aggregate generated_author_info to sum the number of publications and adjusted count, so each person has 1 observation
+
+```{r}
+library(dplyr)
+
+author_nih_award_info <- generated_author_info_clean %>% 
+  left_join(num_awards, by="name") %>% 
+  mutate(num_nih_awds = if_else(is.na(num_of_nih_awds), 0, num_of_nih_awds)) %>% 
+  select(-num_of_nih_awds)
+
+head(author_nih_award_info)
+```
+
 ```{r}
 library(dplyr)
 
@@ -257,6 +386,8 @@ author_award_info <- author_nih_award_info %>%
 head(author_award_info)
 ```
 
+Join with conference ranking and field_conference
+
 ### Preliminary models
 
 ```{r}
@@ -265,4 +396,50 @@ mod1 <- lm(total_grant_awards ~ adjusted_total_publications, data = author_award
 summary(mod1)
 ```
 
+```{r}
+library(dplyr)
+mod2 <- lm(num_nih_awds ~ adjusted_total_publications, data = author_award_info)
+
+summary(mod2)
+
+mod3 <- lm(num_nsf_awds ~ adjusted_total_publications, data = author_award_info)
+
+summary(mod3)
+```
+
+There is not enough statistical evidence that the adjusted number of total publications is associated with num_nih_awds.
+
+
 The number of nih_awards is positively associated with adjusted total publications
+
+What if we aggregate by department?
+
+```{r}
+department_award_info <- author_award_info %>% 
+  group_by(dept) %>% 
+  summarize(
+    nsf_awards = sum(num_nsf_awds),
+    nih_awards = sum(num_nih_awds),
+    total_publications = sum(total_publications),
+    adjusted_total_publications = sum(adjusted_total_publications),
+    total_awards = nsf_awards + nih_awards
+  )
+
+head(department_award_info)
+```
+
+
+```{r}
+mod4 <- lm(adjusted_total_publications ~ nih_awards, data = department_award_info)
+summary(mod4)
+
+mod5 <- lm(adjusted_total_publications ~ nsf_awards, data = department_award_info)
+summary(mod5)
+
+mod6 <- lm(adjusted_total_publications ~ nih_awards + nsf_awards, data = department_award_info)
+summary(mod6)
+```
+
+
+
+
